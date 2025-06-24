@@ -16,7 +16,7 @@
 #include "api/fs/fs.h"
 
 #define NEU_APP_RES_FILE "/resources.neu"
-#define NEU_APP_EMBEDDED_BOUNDARY "NEUEMBED"
+#define NEU_APP_EMBEDDED_BOUNDARY "NEUEMBEDBOUNDARY"
 
 using namespace std;
 using json = nlohmann::json;
@@ -84,11 +84,11 @@ ifstream __openResourceFile() {
         return asarArchive;
     }
 
-    char marker[8];
-    uint8_t offsetBytes[strlen(NEU_APP_EMBEDDED_BOUNDARY)];
+    char marker[strlen(NEU_APP_EMBEDDED_BOUNDARY)];
+    uint8_t offsetBytes[8];
     selfBinary.seekg(fileSize - 8 - strlen(NEU_APP_EMBEDDED_BOUNDARY));
-    selfBinary.read(marker, 8);
-    selfBinary.read(reinterpret_cast<char*>(offsetBytes), strlen(NEU_APP_EMBEDDED_BOUNDARY));
+    selfBinary.read(marker, strlen(NEU_APP_EMBEDDED_BOUNDARY));
+    selfBinary.read(reinterpret_cast<char*>(offsetBytes), 8);
 
     if (strncmp(marker, NEU_APP_EMBEDDED_BOUNDARY, strlen(NEU_APP_EMBEDDED_BOUNDARY)) != 0) {
         if (!asarArchive) {
