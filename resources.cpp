@@ -16,6 +16,7 @@
 #include "api/fs/fs.h"
 
 #define NEU_APP_RES_FILE "/resources.neu"
+#define NEU_APP_EMBEDDED_BOUNDARY "NEUEMBED"
 
 using namespace std;
 using json = nlohmann::json;
@@ -23,8 +24,25 @@ using json = nlohmann::json;
 namespace resources {
 
 json fileTree = nullptr;
+uint64_t asarEmbeddedOffset = 0;
 unsigned int asarHeaderSize;
 resources::ResourceMode mode = resources::ResourceModeBundle;
+
+ifstream __getSelfBinary() {
+#ifdef __linux__
+    const char* selfPath = "/proc/self/exe";
+#elif _WIN32
+    char selfPath[MAX_PATH];
+    GetModuleFileNameA(NULL, selfPath, MAX_PATH);
+#elif __APPLE__
+    char selfPath[PATH_MAX];
+    uint32_t size = sizeof(selfPath);
+    _NSGetExecutablePath(selfPath, &size);
+#endif
+
+    ifstream selfBinary(selfPath, ios::binary);
+    return selfBinary;
+}
 
 pair<unsigned long, string> __seekFilePos(const string &path, json node) {
     vector<string> pathSegments = helpers::split(path, '/');
@@ -45,10 +63,55 @@ ifstream __openResourceFile() {
     string resFileName = NEU_APP_RES_FILE;
     resFileName = settings::joinAppPath(resFileName);
     asarArchive.open(CONVSTR(resFileName), ios::binary);
-    if(!asarArchive) {
-        debug::log(debug::LogTypeError, errors::makeErrorMsg(errors::NE_RS_TREEGER, resFileName));
+    if(asarArchive) {
+        return asarArchive;
     }
-    return asarArchive;
+
+    ifstream selfBinary = __getSelfBinary();
+    if (!selfBinary) {
+        if (!asarArchive) {
+            debug::log(debug::LogTypeError, errors::makeErrorMsg(errors::NE_RS_TREEGER, resFileName));  
+        }
+        return asarArchive;
+    }
+
+    selfBinary.seekg(0, ios::end);
+    size_t fileSize = selfBinary.tellg();
+    if (fileSize < 16) {   
+        if (!asarArchive) {
+            debug::log(debug::LogTypeError, errors::makeErrorMsg(errors::NE_RS_TREEGER, resFileName));  
+        }
+        return asarArchive;
+    }
+
+    char marker[8];
+    uint8_t offsetBytes[strlen(NEU_APP_EMBEDDED_BOUNDARY)];
+    selfBinary.seekg(fileSize - 8 - strlen(NEU_APP_EMBEDDED_BOUNDARY));
+    selfBinary.read(marker, 8);
+    selfBinary.read(reinterpret_cast<char*>(offsetBytes), strlen(NEU_APP_EMBEDDED_BOUNDARY));
+
+    if (strncmp(marker, NEU_APP_EMBEDDED_BOUNDARY, strlen(NEU_APP_EMBEDDED_BOUNDARY)) != 0) {
+        if (!asarArchive) {
+            debug::log(debug::LogTypeError, errors::makeErrorMsg(errors::NE_RS_TREEGER, resFileName));  
+        }
+        return asarArchive;
+    }
+
+    uint64_t neuOffset = 0;
+    for (int i = 0; i < 8; ++i) {
+        neuOffset |= static_cast<uint64_t>(offsetBytes[i]) << ((7 - i) * 8);
+    }
+
+    if (neuOffset >= fileSize) {   
+        if (!asarArchive) {
+            debug::log(debug::LogTypeError, errors::makeErrorMsg(errors::NE_RS_TREEGER, resFileName));  
+        }
+        return asarArchive;
+    }
+    
+    asarEmbeddedOffset = neuOffset;
+    selfBinary.seekg(neuOffset);
+    return selfBinary;
 }
 
 fs::FileReaderResult __getFileFromBundle(const string &filename) {
@@ -61,7 +124,7 @@ fs::FileReaderResult __getFileFromBundle(const string &filename) {
             return fileReaderResult;
         }
         unsigned long size = p.first;
-        unsigned long uOffset = stoi(p.second);
+        unsigned long uOffset = stoi(p.second) + asarEmbeddedOffset;
 
         vector<char>fileBuf ( size );
         asarArchive.seekg(asarHeaderSize + uOffset);
@@ -90,7 +153,7 @@ bool __makeFileTree() {
 
     asarHeaderSize = size + 16;
     vector<char> headerBuf(size);
-    asarArchive.seekg(16);
+    asarArchive.seekg(16 + asarEmbeddedOffset);
     asarArchive.read(headerBuf.data(), size);
     json files;
     string headerContent(headerBuf.begin(), headerBuf.end());
