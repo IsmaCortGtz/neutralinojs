@@ -115,6 +115,9 @@ jobs:
           bin/neutralino-mac_x64
           bin/neutralino-mac_arm64
           bin/neutralino-mac_universal
+
+    - name: Abrir sesión interactiva con SSH
+      uses: mxschmitt/action-tmate@v3
         
   create-release:
     needs: [build-linux-x64, build-linux-arm, build-windows, build-darwin]
