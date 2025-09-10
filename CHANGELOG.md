@@ -6,6 +6,8 @@ rename `Unreleased` topic with the new version tag. Finally, create a new `Unrel
 
 ## Unreleased
 
+## v4.9.10
+
 ### Configuration
 - Support the `window.skipTaskbar` boolean option to hide the application icon from the operating system taskbar/dock. This option can also be passed from the command line via the `--window-skip-taskbar=<true|false>` option.
 
