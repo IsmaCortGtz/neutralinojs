@@ -10,7 +10,9 @@
             "lib/asio/include",
             "lib/infoware/include",
             "lib/efsw/include",
-            "lib/efsw/src"
+            "lib/efsw/src",
+            "lib/bearssl",
+            "lib/bearssl/src"
         ],
         "windows": [
             "lib/webview/windows"
@@ -28,7 +30,10 @@
             "lib/clip/clip.cpp",
             "lib/clip/image.cpp",
             "lib/infoware/src/**/*.cpp",
-            "lib/efsw/src/efsw/*.cpp"
+            "lib/efsw/src/efsw/*.cpp",
+            "lib/miniz/miniz.c",
+            "lib/bearssl/src/**/*.c",
+            "lib/pockethttp/pockethttp.cpp"
         ],
         "linux": [
             "lib/tinyprocess/process_unix.cpp",

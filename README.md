@@ -89,6 +89,10 @@ If you like to support our work, you can donate to Neutralinojs via [Patreon](ht
 - Cross-platform C++ system information library: CC0 1.0 Universal from [ThePhD/infoware](https://github.com/ThePhD/infoware). Written in 2016-2020 by nabijaczleweli and ThePhD
 - Cross-platform C++ filesystem watcher library: MIT from [SpartanJ/efsw](https://github.com/SpartanJ/efsw). Copyright (c) 2020 Martín Lucas Golini
 - Resource injection/reading library for C++/Node.js: MIT from [nodejs/postject](https://github.com/nodejs/postject). Copyright (c) 2022 Postman, Inc
+- Cross-platform C data compression library for [`RFC 1950`](https://www.rfc-editor.org/rfc/rfc1950.txt) and [`RFC 1951`](https://www.rfc-editor.org/rfc/rfc1951.txt): MIT from [richgel999/miniz](https://github.com/richgel999/miniz). Copyright 2013-2014 RAD Game Tools and Valve Software.
+Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC.
+- Cross-platform C implementation of the SSL/TLS protocol ([`RFC 5246`](https://www.rfc-editor.org/rfc/rfc5246.txt)): MIT from [bearssl.org](https://bearssl.org/). Copyright (c) 2016 Thomas Pornin <pornin@bolet.org>.
+- Cross-platform C++ HTTP/HTTPS library: MIT from [IsmaCortGtz/pocket-http](https://github.com/IsmaCortGtz/pocket-http). Copyright (c) 2025 Ismael Cortés Gutiérrez
 - Logo design credits: [IconsPng](https://www.iconspng.com/image/2688/atom-orange). Copyright free as mentioned on their website.
 
 [See the complete license file](LICENSE)
