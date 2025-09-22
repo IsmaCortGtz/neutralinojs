@@ -65,6 +65,10 @@ string __getStatusCodeString(const errors::StatusCode code) {
         case errors::NE_CF_UNBPRCF: return "NE_CF_UNBPRCF";
         case errors::NE_CF_UNSUPMD: return "NE_CF_UNSUPMD";
         case errors::NE_CF_UNBLWCF: return "NE_CF_UNBLWCF";
+        // net
+        case errors::NE_NW_WIN32ER: return "NE_NW_WIN32ER";
+        case errors::NE_NW_DNSRESV: return "NE_NW_DNSRESV";
+        case errors::NE_NW_REQFAIL: return "NE_NW_REQFAIL";
     }
     return "NE_ST_NOTOK";
 }
@@ -125,6 +129,10 @@ string __findStatusCodeDesc(errors::StatusCode code) {
         case errors::NE_CF_UNBPRCF: return "Unable to parse the config file: %1";
         case errors::NE_CF_UNSUPMD: return "Unsupported mode: %1. The default mode (window) is selected.";
                 case errors::NE_CF_UNBLWCF: return "Unable to load the window config file: %1";
+        // net
+        case errors::NE_NW_WIN32ER: return "Error in Win32 API: %1";
+        case errors::NE_NW_DNSRESV: return "DNS resolution failed for hostname: %1";
+        case errors::NE_NW_REQFAIL: return "Network request failed for URL: %1";
     }
     return "";
 }

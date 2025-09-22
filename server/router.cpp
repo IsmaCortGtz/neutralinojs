@@ -29,6 +29,7 @@
 #include "api/res/res.h"
 #include "api/server/server.h"
 #include "api/custom/custom.h"
+#include "api/net/net.h"
 
 #if defined(__APPLE__)
 #include <dispatch/dispatch.h>
@@ -161,6 +162,10 @@ map<string, router::NativeMethod> methodMap = {
     // Neutralino.custom
     {"custom.getMethods", custom::controllers::getMethods},
     // {"custom.add", custom::controllers::add} // Sample custom method
+    // Neutralino.net
+    {"net.resolveHost", net::controllers::resolveHost},
+    {"net.isOnline", net::controllers::isOnline},
+    {"net.fetch", net::controllers::fetch},
 };
 
 map<string, router::NativeMethod> getMethodMap() {
