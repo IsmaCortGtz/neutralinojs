@@ -67,6 +67,8 @@
             "-Wno-deprecated-declarations",
             "-framework WebKit",
             "-framework Cocoa",
+            "-framework CoreFoundation",
+            "-framework Security",
             "-Os",
             "-mmacosx-version-min=11.01"
         ],
@@ -86,6 +88,7 @@
             "ASIO_STANDALONE",
             "INFOWARE_VERSION=\\\"0.6.0\\\"",
             "INFOWARE_USE_X11",
+            "USE_POCKET_HTTP_BEARSSL",
             "CLIP_ENABLE_IMAGE"
         ],
         "linux": [
