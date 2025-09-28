@@ -21,7 +21,13 @@
  */
 
 // Auto-generated merged cpp
-#include "pockethttp.hpp"
+#if __has_include("pockethttp.hpp")
+  #include "pockethttp.hpp"
+#elif __has_include("pockethttp/pockethttp.hpp")
+  #include "pockethttp/pockethttp.hpp"
+#else
+  #error "Cannot find pockethttp.hpp"
+#endif
 
 // pockethttp/Buffer.cpp
 // #include "pockethttp/Buffer.hpp"
@@ -102,7 +108,15 @@ namespace pockethttp {
 // pockethttp/Decompress.cpp
 // #include "pockethttp/Logs.hpp"
 // #include "pockethttp/Decompress.hpp"
-#include <miniz/miniz.h>
+
+#if __has_include("miniz.h")
+  #include <miniz.h>
+#elif __has_include("miniz/miniz.h")
+  #include <miniz/miniz.h>
+#else
+  #error "Cannot find miniz.h or miniz/miniz.h"
+#endif
+
 #include <stdexcept>
 #include <iostream>
 #include <functional>
@@ -442,544 +456,21 @@ namespace pockethttp {
 
 } // namespace pockethttp
 
-// pockethttp/Sockets/SocketWrapper.cpp
-// #include "pockethttp/Sockets/SocketWrapper.hpp"
+// pockethttp/SystemCerts.cpp
+// #include "pockethttp/SystemCerts.hpp"
 // #include "pockethttp/Logs.hpp"
-
-#include <string>
-#include <iostream>
-#include <cstring>
-#include <stdexcept>
-#include <chrono>
-#include <vector>
-
-#ifdef _WIN32
-  #include <winsock2.h>
-  #include <ws2tcpip.h>
-  #pragma comment(lib, "ws2_32.lib")
-  typedef int socklen_t;
-#else
-  #include <sys/socket.h>
-  #include <sys/ioctl.h>
-  #include <netinet/in.h>
-  #include <netinet/tcp.h>  
-  #include <arpa/inet.h>
-  #include <netdb.h>
-  #include <unistd.h>
-  #include <fcntl.h>
-  #include <errno.h>
-  typedef int SOCKET;
-  #define INVALID_SOCKET (-1)
-  #define SOCKET_ERROR (-1)
-  #define closesocket(s) close(s)
-#endif
-
-namespace pockethttp {
-
-  #ifdef _WIN32
-    WinSockManager& WinSockManager::getInstance() {
-      static WinSockManager instance;
-      return instance;
-    }
-
-    bool WinSockManager::isInitialized() const {
-      return initialized_;
-    }
-
-    WinSockManager::WinSockManager() {
-      WSADATA wsaData;
-      if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) {
-        initialized_ = true;
-        pockethttp_log("[WinSockManager] WinSock initialized successfully");
-      } else {
-        pockethttp_error("[WinSockManager] Failed to initialize WinSock");
-      }
-    }
-    
-    WinSockManager::~WinSockManager() {
-      if (initialized_) {
-        WSACleanup();
-        pockethttp_log("[WinSockManager] WinSock cleanup completed");
-      }
-    }
-  #endif // _WIN32
-
-  bool SocketWrapper::openTCPSocket(const std::string& host, int port) {
-    pockethttp_log("[SocketWrapper] Attempting to connect to " << host << ":" << port);
-
-    if (connected_ || socket_fd_ != INVALID_SOCKET) {
-      pockethttp_log("[SocketWrapper] Socket already connected, disconnecting first");
-      disconnect();
-    }
-    
-    struct addrinfo hints, *result;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    
-    std::string port_str = std::to_string(port);
-    int status = getaddrinfo(host.c_str(), port_str.c_str(), &hints, &result);
-    if (status != 0) {
-      pockethttp_error("[SocketWrapper] Failed to resolve hostname: " << host);
-      return false;
-    }
-
-    pockethttp_log("[SocketWrapper] Hostname resolved successfully");
-    std::vector<struct addrinfo*> ipv4_addresses;
-    std::vector<struct addrinfo*> ipv6_addresses;
-    
-    for (struct addrinfo* addr_ptr = result; addr_ptr != nullptr; addr_ptr = addr_ptr->ai_next) {
-      if (addr_ptr->ai_family == AF_INET) {
-        ipv4_addresses.push_back(addr_ptr);
-      } else if (addr_ptr->ai_family == AF_INET6) {
-        ipv6_addresses.push_back(addr_ptr);
-      }
-    }
-
-    pockethttp_log(
-      "[SocketWrapper] Found " << ipv4_addresses.size() << " IPv4 addresses and " 
-      << ipv6_addresses.size() << " IPv6 addresses"
-    );
-
-    size_t ipv4_tried = 0;
-    size_t ipv6_tried = 0;
-    
-    while (ipv4_tried < ipv4_addresses.size() || ipv6_tried < ipv6_addresses.size()) {
-      std::vector<SOCKET> sockets;
-      std::vector<struct addrinfo*> addresses;
-        
-      for (int i = 0; i < 2 && ipv4_tried < ipv4_addresses.size(); ++i, ++ipv4_tried) {
-        addresses.push_back(ipv4_addresses[ipv4_tried]);
-      }
-        
-      if (ipv6_tried < ipv6_addresses.size()) {
-        addresses.push_back(ipv6_addresses[ipv6_tried]);
-        ipv6_tried++;
-      }
-        
-      while (addresses.size() < 3 && ipv6_tried < ipv6_addresses.size()) {
-        addresses.push_back(ipv6_addresses[ipv6_tried]);
-        ipv6_tried++;
-      }
-
-      pockethttp_log("[SocketWrapper] Attempting parallel connection to " << addresses.size() << " addresses");
-
-      for (auto addr_ptr : addresses) {
-        SOCKET sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, addr_ptr->ai_protocol);
-        
-        if (sock == INVALID_SOCKET) {
-          pockethttp_error("[SocketWrapper] Failed to create socket");
-          continue;
-        }
-            
-        #ifdef _WIN32
-          unsigned long mode = 1;
-          ioctlsocket(sock, FIONBIO, &mode);
-        #else
-          int flags = fcntl(sock, F_GETFL, 0);
-          fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-        #endif
-            
-        int connect_result = ::connect(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen);
-        if (connect_result == SOCKET_ERROR) {
-          #ifdef _WIN32
-            int error = WSAGetLastError();
-            if (error != WSAEWOULDBLOCK) {
-              pockethttp_error("[SocketWrapper] Connect failed with error: " << error);
-              closesocket(sock);
-              continue;
-            }
-          #else
-            if (errno != EINPROGRESS) {
-              pockethttp_error("[SocketWrapper] Connect failed: " << strerror(errno));
-              closesocket(sock);
-              continue;
-            }
-          #endif
-        }
-            
-        sockets.push_back(sock);
-      }
-        
-      if (sockets.empty()) {
-        pockethttp_error("[SocketWrapper] No sockets created for this batch");
-        continue;
-      }
-        
-      fd_set write_fds, error_fds;
-      struct timeval timeout;
-      timeout.tv_sec = 3;
-      timeout.tv_usec = 0;
-        
-      while (!sockets.empty()) {
-        FD_ZERO(&write_fds);
-        FD_ZERO(&error_fds);
-            
-        SOCKET max_fd = 0;
-        for (SOCKET sock : sockets) {
-          FD_SET(sock, &write_fds);
-          FD_SET(sock, &error_fds);
-          #ifndef _WIN32
-            if (sock > max_fd) max_fd = sock;
-          #endif
-        }
-            
-        #ifdef _WIN32
-          int select_result = select(0, nullptr, &write_fds, &error_fds, &timeout);
-        #else
-          int select_result = select(max_fd + 1, nullptr, &write_fds, &error_fds, &timeout);
-        #endif
-            
-        if (select_result == SOCKET_ERROR) {
-          pockethttp_error("[SocketWrapper] Select failed during connection");
-          break;
-        }
-        if (select_result == 0) {
-          pockethttp_log("[SocketWrapper] Connection timeout");
-          break;
-        }
-            
-        for (size_t i = 0; i < sockets.size(); ++i) {
-          SOCKET sock = sockets[i];
-                
-          if (FD_ISSET(sock, &error_fds)) {
-            pockethttp_error("[SocketWrapper] Socket error detected");
-            closesocket(sock);
-            sockets.erase(sockets.begin() + i);
-            addresses.erase(addresses.begin() + i);
-            --i;
-            continue;
-          }
-                
-          if (FD_ISSET(sock, &write_fds)) {
-            int error = 0;
-            socklen_t error_len = sizeof(error);
-                    
-            #ifdef _WIN32
-              int sockopt = (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)&error, &error_len) == 0 && error == 0);
-            #else
-              int sockopt = (getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &error_len) == 0 && error == 0);
-            #endif
-
-            if (sockopt) {
-              char addr_str[INET6_ADDRSTRLEN];
-              void* addr;
-              if (addresses[i]->ai_family == AF_INET) {
-                struct sockaddr_in* ipv4 = (struct sockaddr_in*)addresses[i]->ai_addr;
-                addr = &(ipv4->sin_addr);
-              } else {
-                struct sockaddr_in6* ipv6 = (struct sockaddr_in6*)addresses[i]->ai_addr;
-                addr = &(ipv6->sin6_addr);
-              }
-                
-              inet_ntop(addresses[i]->ai_family, addr, addr_str, INET6_ADDRSTRLEN);
-              pockethttp_log("[SocketWrapper] Successfully connected to " << addr_str << ":" << port);
-
-              #ifdef _WIN32
-                unsigned long mode = 0;
-                ioctlsocket(sock, FIONBIO, &mode);
-              #else
-                int flags = fcntl(sock, F_GETFL, 0);
-                if (flags == -1) {
-                    pockethttp_error("[SocketWrapper] fcntl(F_GETFL) failed: " << strerror(errno));
-                } else {
-                    fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
-                    int new_flags = fcntl(sock, F_GETFL, 0);
-                    pockethttp_log("[SocketWrapper] Socket (" << sock << ") flags after F_SETFL: " << new_flags);
-                }
-              #endif
-                        
-              for (size_t j = 0; j < sockets.size(); ++j) {
-                if (j != i) closesocket(sockets[j]);
-              }
-                        
-              this->socket_fd_ = sock;
-              this->connected_ = true;
-              this->last_used_timestamp_ = pockethttp::Timestamp::getCurrentTimestamp();
-                        
-              freeaddrinfo(result);
-              return true;
-
-            } else {
-              pockethttp_error("[SocketWrapper] Socket connection failed with error: " << error);
-              closesocket(sock);
-              sockets.erase(sockets.begin() + i);
-              addresses.erase(addresses.begin() + i);
-              --i;
-            }
-          }
-        }
-      }
-        
-      for (SOCKET sock : sockets) {
-        closesocket(sock);
-      }
-    }
-
-    pockethttp_error("[SocketWrapper] Failed to connect to " << host << ":" << port);
-    freeaddrinfo(result);
-    return false;
-  }
-
-} // namespace pockethttp
-
-
-// pockethttp/Sockets/TCPSocket.cpp
 // #include "pockethttp/Buffer.hpp"
-// #include "pockethttp/Sockets/TCPSocket.hpp"
-// #include "pockethttp/Sockets/SocketWrapper.hpp"
-// #include "pockethttp/Timestamp.hpp"
-// #include "pockethttp/Logs.hpp"
-#include <string>
-#include <iostream>
-#include <cstring>
-#include <stdexcept>
-#include <chrono>
-
-#ifdef _WIN32
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    #pragma comment(lib, "ws2_32.lib")
-    typedef int socklen_t;
-    typedef SSIZE_T ssize_t;
-#else
-    #include <sys/socket.h>
-    #include <sys/ioctl.h>
-    #include <netinet/in.h>
-    #include <netinet/tcp.h>  
-    #include <arpa/inet.h>
-    #include <netdb.h>
-    #include <unistd.h>
-    #include <fcntl.h>
-    #include <errno.h>
-    typedef int SOCKET;
-    #define INVALID_SOCKET (-1)
-    #define SOCKET_ERROR (-1)
-    #define closesocket(s) close(s)
-#endif
-
-namespace pockethttp {
-
-  TCPSocket::TCPSocket() {
-    this->connected_ = false;
-    this->socket_fd_ = INVALID_SOCKET;
-    
-    pockethttp_log("[TCPSocket] TCPSocket constructor called");
-    #ifdef _WIN32
-      auto& manager = WinSockManager::getInstance();
-      if (!manager.isInitialized()) {
-        pockethttp_error("[TCPSocket] WinSock not initialized, throwing exception");
-        throw std::runtime_error("WinSock initialization failed");
-      }
-    #endif
-  }
-
-  TCPSocket::~TCPSocket() {
-    pockethttp_log("[TCPSocket] TCPSocket destructor called");
-    this->disconnect();
-  }
-
-
-  bool TCPSocket::connect(const std::string &host, int port) {
-    return this->openTCPSocket(host, port);
-  }
-
-  void TCPSocket::disconnect() {
-    if (this->socket_fd_ != INVALID_SOCKET) {
-      pockethttp_log("[TCPSocket] Disconnecting socket");
-      closesocket(this->socket_fd_);
-      this->socket_fd_ = INVALID_SOCKET;
-      this->connected_ = false;
-    }
-  }
-
-
-  size_t TCPSocket::send(const unsigned char* buffer, const size_t size) {
-    if (!this->connected_ || this->socket_fd_ == INVALID_SOCKET) {
-      pockethttp_error("[TCPSocket] Cannot send data: socket not connected");
-      return pockethttp::Buffer::error;
-    }
-
-    pockethttp_log("[TCPSocket] Sending " << size << " bytes");
-    size_t total_sent = 0;
-    
-    while (total_sent < size) {
-      ssize_t bytes_sent = ::send(this->socket_fd_, (const char *)(buffer + total_sent), size - total_sent, 0);
-      if (bytes_sent == SOCKET_ERROR || bytes_sent < 0) {
-        #ifdef _WIN32
-          pockethttp_error("[TCPSocket] Send failed with error: " << WSAGetLastError());
-        #else
-          pockethttp_error("[TCPSocket] Send failed with error: " << strerror(errno));
-        #endif
-        return pockethttp::Buffer::error;
-      }
-        
-      total_sent += bytes_sent;
-      pockethttp_log("[TCPSocket] Sent " << bytes_sent << " bytes. (" << total_sent << "/" << size << ")");
-    }
-    
-    last_used_timestamp_ = pockethttp::Timestamp::getCurrentTimestamp();
-    pockethttp_log("[TCPSocket] Data sent successfully");
-    return total_sent;
-  }
-
-  size_t TCPSocket::receive(unsigned char* buffer, size_t size, const int64_t& timeout) {
-    if (!this->connected_ || this->socket_fd_ == INVALID_SOCKET) {
-      pockethttp_error("[TCPSocket] Cannot receive data: socket not connected");
-      return pockethttp::Buffer::error;
-    }
-
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(this->socket_fd_, &read_fds);
-
-    // Wait a short time period to see if there is data.
-    // This avoids blocking indefinitely.
-    struct timeval timeout_;
-    timeout_.tv_sec = timeout / 1000; // seconds
-    timeout_.tv_usec = (timeout % 1000) * 1000; // microseconds
-
-    int select_result = select(this->socket_fd_ + 1, &read_fds, nullptr, nullptr, &timeout_);
-    pockethttp_log("[TCPSocket] Select result: " << select_result);
-
-    if (select_result == SOCKET_ERROR) {
-      #ifdef _WIN32
-        pockethttp_error("[TCPSocket] Select failed with error: " << WSAGetLastError());
-      #else
-        pockethttp_error("[TCPSocket] Select failed with error: " << strerror(errno));
-      #endif
-
-      this->disconnect();
-      return pockethttp::Buffer::error;
-    }
-
-    if (select_result == 0 || !FD_ISSET(this->socket_fd_, &read_fds)) {
-      // No data or timeout, return Buffer error.
-      pockethttp_error("[TCPSocket] No data available for reading (timeout [" << timeout << "] or no data): (" << errno << ") " << strerror(errno));
-      this->disconnect();
-      return pockethttp::Buffer::error;
-    }
-
-    ssize_t bytes_received = ::recv(this->socket_fd_, (char *)buffer, size, 0);
-    pockethttp_log("[TCPSocket] Received " << bytes_received << " bytes");
-
-    if (bytes_received == SOCKET_ERROR) {
-      #ifdef _WIN32
-        int err = WSAGetLastError();
-        if (err != WSAEWOULDBLOCK) {
-          pockethttp_error("[TCPSocket] Receive failed with error: " << err);
-          this->disconnect();
-        }
-      #else
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-          pockethttp_error("[TCPSocket] Receive failed with error: " << strerror(errno));
-          this->disconnect();
-        }
-      #endif
-      return pockethttp::Buffer::error;
-    }
-
-    if (bytes_received == 0) {
-      pockethttp_error("[TCPSocket] Server closed the connection: (" << errno << ") " << strerror(errno));
-      this->disconnect();
-      return pockethttp::Buffer::error;
-    }
-
-    last_used_timestamp_ = pockethttp::Timestamp::getCurrentTimestamp();
-    return bytes_received;
-  }
-
-
-  bool TCPSocket::isConnected() {
-    if (!this->connected_ || this->socket_fd_ == INVALID_SOCKET) {
-      pockethttp_log("[TCPSocket] Socket is not connected");
-      return false;
-    }
-    
-    fd_set read_fds, write_fds, error_fds;
-    FD_ZERO(&read_fds);
-    FD_ZERO(&write_fds);
-    FD_ZERO(&error_fds);
-    FD_SET(socket_fd_, &read_fds);
-    FD_SET(socket_fd_, &write_fds);
-    FD_SET(socket_fd_, &error_fds);
-    
-    struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 0;
-
-    int result = select(this->socket_fd_ + 1, &read_fds, &write_fds, &error_fds, &timeout);
-    if (result < 0) {
-      pockethttp_error("[TCPSocket] Select failed in isConnected check");
-      this->connected_ = false;
-      this->socket_fd_ = INVALID_SOCKET;
-      return false;
-    }
-    
-    if (FD_ISSET(this->socket_fd_, &error_fds)) {
-      pockethttp_error("[TCPSocket] Socket error detected in isConnected check");
-      this->connected_ = false;
-      this->socket_fd_ = INVALID_SOCKET;
-      return false;
-    }
-
-    if (FD_ISSET(this->socket_fd_, &read_fds)) {
-      char test_buffer[1];  
-      #ifdef _WIN32
-        int peek_result = ::recv(this->socket_fd_, test_buffer, 1, MSG_PEEK);
-      #else
-        int peek_result = ::recv(this->socket_fd_, test_buffer, 1, MSG_PEEK | MSG_DONTWAIT);
-      #endif
-        
-      if (peek_result == 0) {
-        pockethttp_log("[TCPSocket] Connection closed by peer");
-        this->connected_ = false;
-        this->socket_fd_ = INVALID_SOCKET;
-        return false;
-      }
-        
-      if (peek_result == SOCKET_ERROR) {
-        #ifdef _WIN32
-          int error = WSAGetLastError();
-          if (error != WSAEWOULDBLOCK && error != WSAENOTSOCK) {
-            pockethttp_error("[TCPSocket] Peek operation failed with error: " << error);
-            this->connected_ = false;
-            this->socket_fd_ = INVALID_SOCKET;
-            return false;
-          }
-        #else
-          if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            pockethttp_error("[TCPSocket] Peek operation failed: " << strerror(errno));
-            this->connected_ = false;
-            this->socket_fd_ = INVALID_SOCKET;
-            return false;
-          }
-        #endif
-      }
-    }
-    
-    pockethttp_log("[TCPSocket] Socket connection is healthy");
-    return true;
-  }
-
-  int64_t TCPSocket::getTimestamp() const {
-    return this->last_used_timestamp_;
-  }
-
-} // namespace pockethttp
-
-// pockethttp/Sockets/TLSSocket.cpp
-// #include "pockethttp/Sockets/TLSSocket.hpp"
-// #include "pockethttp/Logs.hpp"
-// #include "pockethttp/Timestamp.hpp"
-// #include "pockethttp/Buffer.hpp"
-
-#ifdef USE_POCKET_HTTP_BEARSSL
 
 // This file is auto-generated by parse.py
 // Do not edit it manually.
-#ifdef USE_POCKET_HTTP_BEARSSL
-#include <bearssl/bearssl.h>
+#if defined(USE_POCKET_HTTP_BEARSSL) && defined(USE_POCKET_HTTP_MOZILLA_ROOT_CERTS)
+#if __has_include("bearssl.h")
+  #include <bearssl.h>
+#elif __has_include("bearssl/bearssl.h")
+  #include <bearssl/bearssl.h>
+#else
+  #error "Cannot find bearssl.h or bearssl/bearssl.h"
+#endif
 #define TAs_NUM 143
 
 #ifdef __cplusplus
@@ -1822,13 +1313,971 @@ static const br_x509_trust_anchor TAs[143] = { TA0, TA1, TA2, TA3, TA4, TA5, TA6
 #ifdef __cplusplus
 }
 #endif
-#endif // USE_POCKET_HTTP_BEARSSL#include <chrono>
+#endif // USE_POCKET_HTTP_BEARSSL
+#ifdef USE_POCKET_HTTP_BEARSSL
+  #if __has_include("bearssl.h")
+    #include <bearssl.h>
+  #elif __has_include("bearssl/bearssl.h")
+    #include <bearssl/bearssl.h>
+  #else
+    #error "Cannot find bearssl.h or bearssl/bearssl.h"
+  #endif
+#endif // USE_POCKET_HTTP_BEARSSL
+
+#include <base64/base64.hpp>
+#include <chrono>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <algorithm>
+#include <cstdlib>
+
+#if defined(_WIN32)
+  #include <windows.h>
+  #include <wincrypt.h>
+  #pragma comment(lib, "crypt32.lib")
+#elif defined(__APPLE__)
+  #include <Security/Security.h>
+  #include <CoreFoundation/CoreFoundation.h>
+#endif
+
+
+#if defined(__linux__) || defined(__FreeBSD__)
+const std::string SYSTEM_CERTS_PATH_LINUX[] = {
+    "/etc/ssl/certs/ca-certificates.crt",               // Debian / Ubuntu
+    "/etc/pki/tls/certs/ca-bundle.crt",                 // RHEL / CentOS / Fedora
+    "/etc/ssl/ca-bundle.pem",                           // SUSE
+    "/usr/share/pki/trust/anchors/ca-bundle.pem",       // SUSE variants
+    "/usr/local/share/certs/ca-root-nss.crt",           // FreeBSD
+    "/usr/share/ssl/certs/ca-bundle.crt",               // Old Linux fallback
+    "/etc/ca-certificates/extracted/tls-ca-bundle.pem", // Arch / Debian fallback
+    "/etc/ssl/ca-bundle.trust.crt",                     // SUSE fallback
+    "/etc/ssl/cert.pem"                                 // Alpine / Debian fallback
+};
+#endif
+
+namespace pockethttp {
+
+  namespace Certificates {
+
+    std::vector<std::vector<unsigned char>> pem2Der(const std::string &pem) {
+      std::vector<std::vector<unsigned char>> der_list;
+      size_t pos = 0;
+
+      while ((pos = pem.find("-----BEGIN CERTIFICATE-----", pos)) != std::string::npos) {
+        size_t end = pem.find("-----END CERTIFICATE-----", pos);
+        if (end == std::string::npos) break;
+
+        size_t b64_start = pos + strlen("-----BEGIN CERTIFICATE-----");
+        std::string b64_block = pem.substr(b64_start, end - b64_start);
+
+        // Eliminar cualquier carácter que no sea Base64
+        b64_block.erase(
+          std::remove_if(b64_block.begin(), b64_block.end(),
+          [](char c){ return !isalnum(c) && c != '+' && c != '/' && c != '='; }),
+          b64_block.end()
+        );
+
+        // Decodificar Base64
+        std::string decoded = base64::from_base64(b64_block);
+        std::vector<unsigned char> der(decoded.begin(), decoded.end());
+        pos = end + strlen("-----END CERTIFICATE-----");
+        if (der.empty() || !isDER(der)) {
+          pockethttp_error("[SystemCerts] Failed to decode PEM certificate.");
+          continue;
+        }
+
+        der_list.push_back(der);
+      }
+
+      return der_list;
+    }
+
+    bool isDER(std::vector<unsigned char>& cert) {
+      unsigned char* buf = cert.data();
+      int fb;
+      size_t dlen, len = cert.size();
+
+      if (len < 2) return false;
+      if (*buf++ != 0x30) return false;
+
+      fb = *buf++;
+      len -= 2;
+      if (fb < 0x80) {
+        return (size_t)fb == len;
+      } else if (fb == 0x80) {
+        return false;
+      } else {
+        fb -= 0x80;
+        if (len < (size_t)fb + 2) return false;
+
+        len -= (size_t)fb;
+        dlen = 0;
+        while (fb-- > 0) {
+          if (dlen > (len >> 8)) return false;
+          dlen = (dlen << 8) + (size_t)*buf++;
+        }
+        return dlen == len;
+      }
+    }
+
+    #ifdef USE_POCKET_HTTP_BEARSSL
+      void dn_append(void *ctx, const void *data, size_t len) {
+        auto vector = static_cast<std::vector<unsigned char>*>(ctx);
+        vector->insert(
+          vector->end(), 
+          static_cast<const unsigned char*>(data), 
+          static_cast<const unsigned char*>(data) + len
+        );
+      }
+
+      bool der2Anchor(const std::vector<unsigned char>& der, br_x509_trust_anchor *ta) {
+        br_x509_decoder_context dc;
+        br_x509_pkey *pk;
+        std::vector<unsigned char> dn_buf;
+
+        br_x509_decoder_init(&dc, dn_append, &dn_buf);
+        br_x509_decoder_push(&dc, der.data(), der.size());
+        pk = br_x509_decoder_get_pkey(&dc);
+
+        if (!pk) {
+          pockethttp_error("[SystemCerts] Failed to decode certificate.");
+          return false;
+        }
+
+        ta->dn.data = (unsigned char*)malloc(dn_buf.size());
+        if (!ta->dn.data) {
+          pockethttp_error("[SystemCerts] Memory allocation failed.");
+          return false;
+        }
+
+        std::memcpy(ta->dn.data, dn_buf.data(), dn_buf.size());
+        ta->dn.len = dn_buf.size();
+        dn_buf.clear();
+
+        ta->flags = 0;
+        if (br_x509_decoder_isCA(&dc)) ta->flags |= BR_X509_TA_CA;
+        
+        switch (pk->key_type) {
+          case BR_KEYTYPE_RSA:
+            ta->pkey.key_type = BR_KEYTYPE_RSA;
+
+            ta->pkey.key.rsa.n = (unsigned char*)malloc(pk->key.rsa.nlen);
+            if (!ta->pkey.key.rsa.n) {
+              pockethttp_error("[SystemCerts] Memory allocation failed.");
+              free(ta->dn.data);
+              return false;
+            }
+            std::memcpy(ta->pkey.key.rsa.n, pk->key.rsa.n, pk->key.rsa.nlen);
+
+            ta->pkey.key.rsa.e = (unsigned char*)malloc(pk->key.rsa.elen);
+            if (!ta->pkey.key.rsa.e) {
+              pockethttp_error("[SystemCerts] Memory allocation failed.");
+              free(ta->dn.data);
+              free(ta->pkey.key.rsa.n);
+              return false;
+            }
+            std::memcpy(ta->pkey.key.rsa.e, pk->key.rsa.e, pk->key.rsa.elen);
+
+            ta->pkey.key.rsa.elen = pk->key.rsa.elen;
+            break;
+
+          case BR_KEYTYPE_EC:
+            ta->pkey.key_type = BR_KEYTYPE_EC;
+            ta->pkey.key.ec.curve = pk->key.ec.curve;
+            ta->pkey.key.ec.q = (unsigned char*)malloc(pk->key.ec.qlen);
+            if (!ta->pkey.key.ec.q) {
+              pockethttp_error("[SystemCerts] Memory allocation failed.");
+              free(ta->dn.data);
+              return false;
+            }
+            std::memcpy(ta->pkey.key.ec.q, pk->key.ec.q, pk->key.ec.qlen);
+            ta->pkey.key.ec.qlen = pk->key.ec.qlen;
+            break;
+
+          default:
+            pockethttp_error("[SystemCerts] Unsupported public key type in CA.");
+            free(ta->dn.data);
+            return false;
+        }
+
+        return true;
+      }
+    #endif // USE_POCKET_HTTP_BEARSSL
+
+  } // namespace Certificates
+
+  // Public
+  std::vector<std::vector<unsigned char>> SystemCerts::loadSystemCerts() {
+    std::vector<std::vector<unsigned char>> der_list;
+
+    #if defined(_WIN32)
+      
+      pockethttp_log("[SystemCerts] Loading system CA certificates for Windows.");
+      HCERTSTORE hStore = CertOpenSystemStoreW(NULL, L"ROOT");
+      if (!hStore) {
+        pockethttp_error("[SystemCerts] Failed to open ROOT certificate store.");
+        return {};
+      }
+
+      PCCERT_CONTEXT pCertContext = nullptr;
+      while ((pCertContext = CertEnumCertificatesInStore(hStore, pCertContext)) != nullptr) {
+        std::vector<unsigned char> certBuf(
+            pCertContext->pbCertEncoded,
+            pCertContext->pbCertEncoded + pCertContext->cbCertEncoded
+        );
+
+        if (certBuf.empty() || !pockethttp::Certificates::isDER(certBuf)) {
+          pockethttp_error("[SystemCerts] Invalid DER certificate found, skipping.");
+          continue;
+        }
+
+        der_list.push_back(std::move(certBuf));
+      }
+      
+      CertCloseStore(hStore, 0);
+    
+    #elif defined(__APPLE__)
+
+      pockethttp_log("[SystemCerts] Loading system CA certificates for macOS.");
+      auto loadFromKeychain = [&](SecKeychainRef keychain) {
+        CFArrayRef searchList = CFArrayCreate(nullptr, (const void **)&keychain, 1, &kCFTypeArrayCallBacks);
+
+        const void *keys[]   = { kSecClass, kSecReturnRef, kSecMatchLimit, kSecMatchSearchList };
+        const void *values[] = { kSecClassCertificate, kCFBooleanTrue, kSecMatchLimitAll, searchList };
+
+        CFDictionaryRef query = CFDictionaryCreate(nullptr, keys, values, 4,
+                                                   &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        CFArrayRef certsArray = nullptr;
+        OSStatus status = SecItemCopyMatching(query, (CFTypeRef *)&certsArray);
+        CFRelease(query);
+        CFRelease(searchList);
+
+        if (status == errSecItemNotFound) {
+          pockethttp_log("[SystemCerts] No certificates found in the specified keychain.");
+          return;
+        }
+
+        if (status != errSecSuccess || !certsArray) {
+          pockethttp_error("[SystemCerts] Failed to retrieve certificates from current keychain.");
+          return;
+        }
+
+        CFIndex count = CFArrayGetCount(certsArray);
+        for (CFIndex i = 0; i < count; i++) {
+          SecCertificateRef cert = (SecCertificateRef)CFArrayGetValueAtIndex(certsArray, i);
+          if (!cert) continue;
+
+          CFDataRef certData = SecCertificateCopyData(cert);
+          if (!certData) continue;
+
+          const UInt8 *bytes = CFDataGetBytePtr(certData);
+          CFIndex len = CFDataGetLength(certData);
+          std::vector<unsigned char> buf(bytes, bytes + len);
+
+          if (buf.empty() || !pockethttp::Certificates::isDER(buf)) {
+            pockethttp_error("[SystemCerts] Invalid DER certificate found, skipping.");
+            continue;
+          }
+
+          der_list.push_back(std::move(buf));
+          CFRelease(certData);
+        }
+
+        CFRelease(certsArray);
+      };
+    
+      // System Roots from Apple
+      SecKeychainRef rootsKeychain = nullptr;
+      if (SecKeychainOpen("/System/Library/Keychains/SystemRootCertificates.keychain", &rootsKeychain) == errSecSuccess) {
+        pockethttp_log("[SystemCerts] Loading from SystemRootCertificates.keychain");
+        loadFromKeychain(rootsKeychain);
+        CFRelease(rootsKeychain);
+      }
+
+      // System Keychain (CA installed by the system administrator)
+      SecKeychainRef systemKC = nullptr;
+      if (SecKeychainCopyDomainDefault(kSecPreferencesDomainSystem, &systemKC) == errSecSuccess) {
+        pockethttp_log("[SystemCerts] Loading from System Keychain");
+        loadFromKeychain(systemKC);
+        CFRelease(systemKC);
+      }
+
+      // Login Keychain (current user)
+      SecKeychainRef loginKC = nullptr;
+      if (SecKeychainCopyDomainDefault(kSecPreferencesDomainUser, &loginKC) == errSecSuccess) {
+        pockethttp_log("[SystemCerts] Loading from Login Keychain");
+        loadFromKeychain(loginKC);
+        CFRelease(loginKC);
+      }
+
+    #elif defined(__linux__) || defined(__FreeBSD__)
+      
+      pockethttp_log("[SystemCerts] Loading system CA certificates for Linux/FreeBSD.");
+        
+      for (const auto& path : SYSTEM_CERTS_PATH_LINUX) {
+        std::ifstream file(path);
+        if (file.fail()) continue;
+
+        pockethttp_log("[SystemCerts] Found certificate file: " << path);
+        std::string pem((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        file.close();
+
+        std::vector<std::vector<unsigned char>> der_certs = pockethttp::Certificates::pem2Der(pem);
+        if (der_certs.empty()) {
+          pockethttp_log("[SystemCerts] No valid PEM certificates found in: " << path);
+          continue;
+        }
+
+        for (auto& der : der_certs) {
+          if (der.empty() || !pockethttp::Certificates::isDER(der)) {
+            pockethttp_error("[SystemCerts] Invalid DER certificate found, skipping.");
+            continue;
+          }
+
+          der_list.push_back(std::move(der));
+        }
+
+        break;
+      }
+
+    #else
+
+      pockethttp_error("[SystemCerts] System certificate loading not implemented for this OS.");
+      return {};
+
+    #endif
+    
+    pockethttp_log("[SystemCerts] Loaded " << der_list.size() << " CA certificates from the system.");
+    return der_list;
+  }
+    
+  #ifdef USE_POCKET_HTTP_BEARSSL
+    bool SystemCerts::initialized = false;
+    std::vector<br_x509_trust_anchor> SystemCerts::certs;
+
+    br_x509_trust_anchor* SystemCerts::getBearSSLTrustAnchors() {
+      if (!initialized) SystemCerts::init();
+      return certs.data();
+    }
+
+    size_t SystemCerts::getBearSSLTrustAnchorsSize() {
+      if (!initialized) SystemCerts::init();
+      return certs.size();
+    }
+
+    void SystemCerts::cleanup() {
+      #ifdef USE_POCKET_HTTP_MOZILLA_ROOT_CERTS
+        int end = static_cast<int>(certs.size() - TAs_NUM);
+      #else
+        int end = static_cast<int>(certs.size());
+      #endif
+
+      if (end <= 0) return;
+      pockethttp_log("[SystemCerts] Cleaning up " << end << " loaded CA certificates.");
+
+      for (int i = 0; i < end; ++i) {
+        br_x509_trust_anchor &ta = certs[i];
+
+        free(ta.dn.data);
+        if (ta.pkey.key_type == BR_KEYTYPE_RSA) {
+          free(ta.pkey.key.rsa.n);
+          free(ta.pkey.key.rsa.e);
+        } else if (ta.pkey.key_type == BR_KEYTYPE_EC) {
+          free(ta.pkey.key.ec.q);
+        }
+      }
+    }
+
+    void SystemCerts::init() {
+      if (!certs.empty() || initialized) {
+        pockethttp_log("[SystemCerts] Certificates already loaded.");
+        return;
+      }
+
+      initialized = true;
+      std::atexit(pockethttp::SystemCerts::cleanup);
+
+      std::vector<std::vector<unsigned char>> der_list = loadSystemCerts();
+      if (der_list.empty()) {
+        pockethttp_log("[SystemCerts] No system certificates loaded.");
+      } else {
+        for (auto& der : der_list) {
+          br_x509_trust_anchor ta;
+          if (!pockethttp::Certificates::der2Anchor(der, &ta)) {
+            pockethttp_error("[SystemCerts] Failed to convert a certificate to BearSSL format, skipping.");
+            continue;
+          }
+
+          certs.push_back(ta);
+        }
+        pockethttp_log("[SystemCerts] Successfully loaded " << certs.size() << " BearSSL trust anchors.");
+      }
+
+      #ifdef USE_POCKET_HTTP_MOZILLA_ROOT_CERTS
+        // Load Mozilla's root CA certificates
+        pockethttp_log("[SystemCerts] Loading " << TAs_NUM << " Mozilla's root CA certificates.");
+        certs.insert(certs.end(), TAs, TAs + TAs_NUM);
+      #endif
+    }
+  #endif // USE_POCKET_HTTP_BEARSSL
+
+} // namespace pockethttp
+
+// pockethttp/Sockets/SocketWrapper.cpp
+// #include "pockethttp/Sockets/SocketWrapper.hpp"
+// #include "pockethttp/Logs.hpp"
+
+#include <string>
+#include <iostream>
+#include <cstring>
+#include <stdexcept>
+#include <chrono>
+#include <vector>
+
+#ifdef _WIN32
+  #include <winsock2.h>
+  #include <ws2tcpip.h>
+  #pragma comment(lib, "ws2_32.lib")
+  typedef int socklen_t;
+#else
+  #include <sys/socket.h>
+  #include <sys/ioctl.h>
+  #include <netinet/in.h>
+  #include <netinet/tcp.h>  
+  #include <arpa/inet.h>
+  #include <netdb.h>
+  #include <unistd.h>
+  #include <fcntl.h>
+  #include <errno.h>
+  typedef int SOCKET;
+  #define INVALID_SOCKET (-1)
+  #define SOCKET_ERROR (-1)
+  #define closesocket(s) close(s)
+#endif
+
+namespace pockethttp {
+
+  #ifdef _WIN32
+    WinSockManager& WinSockManager::getInstance() {
+      static WinSockManager instance;
+      return instance;
+    }
+
+    bool WinSockManager::isInitialized() const {
+      return initialized_;
+    }
+
+    WinSockManager::WinSockManager() {
+      WSADATA wsaData;
+      if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0) {
+        initialized_ = true;
+        pockethttp_log("[WinSockManager] WinSock initialized successfully");
+      } else {
+        pockethttp_error("[WinSockManager] Failed to initialize WinSock");
+      }
+    }
+    
+    WinSockManager::~WinSockManager() {
+      if (initialized_) {
+        WSACleanup();
+        pockethttp_log("[WinSockManager] WinSock cleanup completed");
+      }
+    }
+  #endif // _WIN32
+
+  bool SocketWrapper::openTCPSocket(const std::string& host, int port) {
+    pockethttp_log("[SocketWrapper] Attempting to connect to " << host << ":" << port);
+
+    if (connected_ || socket_fd_ != INVALID_SOCKET) {
+      pockethttp_log("[SocketWrapper] Socket already connected, disconnecting first");
+      disconnect();
+    }
+    
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    
+    std::string port_str = std::to_string(port);
+    int status = getaddrinfo(host.c_str(), port_str.c_str(), &hints, &result);
+    if (status != 0) {
+      pockethttp_error("[SocketWrapper] Failed to resolve hostname: " << host);
+      return false;
+    }
+
+    pockethttp_log("[SocketWrapper] Hostname resolved successfully");
+    std::vector<struct addrinfo*> ipv4_addresses;
+    std::vector<struct addrinfo*> ipv6_addresses;
+    
+    for (struct addrinfo* addr_ptr = result; addr_ptr != nullptr; addr_ptr = addr_ptr->ai_next) {
+      if (addr_ptr->ai_family == AF_INET) {
+        ipv4_addresses.push_back(addr_ptr);
+      } else if (addr_ptr->ai_family == AF_INET6) {
+        ipv6_addresses.push_back(addr_ptr);
+      }
+    }
+
+    pockethttp_log(
+      "[SocketWrapper] Found " << ipv4_addresses.size() << " IPv4 addresses and " 
+      << ipv6_addresses.size() << " IPv6 addresses"
+    );
+
+    size_t ipv4_tried = 0;
+    size_t ipv6_tried = 0;
+    
+    while (ipv4_tried < ipv4_addresses.size() || ipv6_tried < ipv6_addresses.size()) {
+      std::vector<SOCKET> sockets;
+      std::vector<struct addrinfo*> addresses;
+        
+      for (int i = 0; i < 2 && ipv4_tried < ipv4_addresses.size(); ++i, ++ipv4_tried) {
+        addresses.push_back(ipv4_addresses[ipv4_tried]);
+      }
+        
+      if (ipv6_tried < ipv6_addresses.size()) {
+        addresses.push_back(ipv6_addresses[ipv6_tried]);
+        ipv6_tried++;
+      }
+        
+      while (addresses.size() < 3 && ipv6_tried < ipv6_addresses.size()) {
+        addresses.push_back(ipv6_addresses[ipv6_tried]);
+        ipv6_tried++;
+      }
+
+      pockethttp_log("[SocketWrapper] Attempting parallel connection to " << addresses.size() << " addresses");
+
+      for (auto addr_ptr : addresses) {
+        SOCKET sock = socket(addr_ptr->ai_family, addr_ptr->ai_socktype, addr_ptr->ai_protocol);
+        
+        if (sock == INVALID_SOCKET) {
+          pockethttp_error("[SocketWrapper] Failed to create socket");
+          continue;
+        }
+            
+        #ifdef _WIN32
+          unsigned long mode = 1;
+          ioctlsocket(sock, FIONBIO, &mode);
+        #else
+          int flags = fcntl(sock, F_GETFL, 0);
+          fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+        #endif
+            
+        int connect_result = ::connect(sock, addr_ptr->ai_addr, addr_ptr->ai_addrlen);
+        if (connect_result == SOCKET_ERROR) {
+          #ifdef _WIN32
+            int error = WSAGetLastError();
+            if (error != WSAEWOULDBLOCK) {
+              pockethttp_error("[SocketWrapper] Connect failed with error: " << error);
+              closesocket(sock);
+              continue;
+            }
+          #else
+            if (errno != EINPROGRESS) {
+              pockethttp_error("[SocketWrapper] Connect failed: " << strerror(errno));
+              closesocket(sock);
+              continue;
+            }
+          #endif
+        }
+            
+        sockets.push_back(sock);
+      }
+        
+      if (sockets.empty()) {
+        pockethttp_error("[SocketWrapper] No sockets created for this batch");
+        continue;
+      }
+        
+      fd_set write_fds, error_fds;
+      struct timeval timeout;
+      timeout.tv_sec = 3;
+      timeout.tv_usec = 0;
+        
+      while (!sockets.empty()) {
+        FD_ZERO(&write_fds);
+        FD_ZERO(&error_fds);
+            
+        SOCKET max_fd = 0;
+        for (SOCKET sock : sockets) {
+          FD_SET(sock, &write_fds);
+          FD_SET(sock, &error_fds);
+          #ifndef _WIN32
+            if (sock > max_fd) max_fd = sock;
+          #endif
+        }
+            
+        #ifdef _WIN32
+          int select_result = select(0, nullptr, &write_fds, &error_fds, &timeout);
+        #else
+          int select_result = select(max_fd + 1, nullptr, &write_fds, &error_fds, &timeout);
+        #endif
+            
+        if (select_result == SOCKET_ERROR) {
+          pockethttp_error("[SocketWrapper] Select failed during connection");
+          break;
+        }
+        if (select_result == 0) {
+          pockethttp_log("[SocketWrapper] Connection timeout");
+          break;
+        }
+            
+        for (size_t i = 0; i < sockets.size(); ++i) {
+          SOCKET sock = sockets[i];
+                
+          if (FD_ISSET(sock, &error_fds)) {
+            pockethttp_error("[SocketWrapper] Socket error detected");
+            closesocket(sock);
+            sockets.erase(sockets.begin() + i);
+            addresses.erase(addresses.begin() + i);
+            --i;
+            continue;
+          }
+                
+          if (FD_ISSET(sock, &write_fds)) {
+            int error = 0;
+            socklen_t error_len = sizeof(error);
+                    
+            #ifdef _WIN32
+              int sockopt = (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)&error, &error_len) == 0 && error == 0);
+            #else
+              int sockopt = (getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &error_len) == 0 && error == 0);
+            #endif
+
+            if (sockopt) {
+              char addr_str[INET6_ADDRSTRLEN];
+              void* addr;
+              if (addresses[i]->ai_family == AF_INET) {
+                struct sockaddr_in* ipv4 = (struct sockaddr_in*)addresses[i]->ai_addr;
+                addr = &(ipv4->sin_addr);
+              } else {
+                struct sockaddr_in6* ipv6 = (struct sockaddr_in6*)addresses[i]->ai_addr;
+                addr = &(ipv6->sin6_addr);
+              }
+                
+              inet_ntop(addresses[i]->ai_family, addr, addr_str, INET6_ADDRSTRLEN);
+              pockethttp_log("[SocketWrapper] Successfully connected to " << addr_str << ":" << port);
+
+              #ifdef _WIN32
+                unsigned long mode = 0;
+                ioctlsocket(sock, FIONBIO, &mode);
+              #else
+                int flags = fcntl(sock, F_GETFL, 0);
+                if (flags == -1) {
+                    pockethttp_error("[SocketWrapper] fcntl(F_GETFL) failed: " << strerror(errno));
+                } else {
+                    fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
+                    int new_flags = fcntl(sock, F_GETFL, 0);
+                    pockethttp_log("[SocketWrapper] Socket (" << sock << ") flags after F_SETFL: " << new_flags);
+                }
+              #endif
+                        
+              for (size_t j = 0; j < sockets.size(); ++j) {
+                if (j != i) closesocket(sockets[j]);
+              }
+                        
+              this->socket_fd_ = sock;
+              this->connected_ = true;
+              this->last_used_timestamp_ = pockethttp::Timestamp::getCurrentTimestamp();
+                        
+              freeaddrinfo(result);
+              return true;
+
+            } else {
+              pockethttp_error("[SocketWrapper] Socket connection failed with error: " << error);
+              closesocket(sock);
+              sockets.erase(sockets.begin() + i);
+              addresses.erase(addresses.begin() + i);
+              --i;
+            }
+          }
+        }
+      }
+        
+      for (SOCKET sock : sockets) {
+        closesocket(sock);
+      }
+    }
+
+    pockethttp_error("[SocketWrapper] Failed to connect to " << host << ":" << port);
+    freeaddrinfo(result);
+    return false;
+  }
+
+} // namespace pockethttp
+
+
+// pockethttp/Sockets/TCPSocket.cpp
+// #include "pockethttp/Buffer.hpp"
+// #include "pockethttp/Sockets/TCPSocket.hpp"
+// #include "pockethttp/Sockets/SocketWrapper.hpp"
+// #include "pockethttp/Timestamp.hpp"
+// #include "pockethttp/Logs.hpp"
+#include <string>
+#include <iostream>
+#include <cstring>
+#include <stdexcept>
+#include <chrono>
+
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #pragma comment(lib, "ws2_32.lib")
+    typedef int socklen_t;
+    typedef SSIZE_T ssize_t;
+#else
+    #include <sys/socket.h>
+    #include <sys/ioctl.h>
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>  
+    #include <arpa/inet.h>
+    #include <netdb.h>
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include <errno.h>
+    typedef int SOCKET;
+    #define INVALID_SOCKET (-1)
+    #define SOCKET_ERROR (-1)
+    #define closesocket(s) close(s)
+#endif
+
+namespace pockethttp {
+
+  TCPSocket::TCPSocket() {
+    this->connected_ = false;
+    this->socket_fd_ = INVALID_SOCKET;
+    
+    pockethttp_log("[TCPSocket] TCPSocket constructor called");
+    #ifdef _WIN32
+      auto& manager = WinSockManager::getInstance();
+      if (!manager.isInitialized()) {
+        pockethttp_error("[TCPSocket] WinSock not initialized, throwing exception");
+        throw std::runtime_error("WinSock initialization failed");
+      }
+    #endif
+  }
+
+  TCPSocket::~TCPSocket() {
+    pockethttp_log("[TCPSocket] TCPSocket destructor called");
+    this->disconnect();
+  }
+
+
+  bool TCPSocket::connect(const std::string &host, int port) {
+    return this->openTCPSocket(host, port);
+  }
+
+  void TCPSocket::disconnect() {
+    if (this->socket_fd_ != INVALID_SOCKET) {
+      pockethttp_log("[TCPSocket] Disconnecting socket");
+      closesocket(this->socket_fd_);
+      this->socket_fd_ = INVALID_SOCKET;
+      this->connected_ = false;
+    }
+  }
+
+
+  size_t TCPSocket::send(const unsigned char* buffer, const size_t size) {
+    if (!this->connected_ || this->socket_fd_ == INVALID_SOCKET) {
+      pockethttp_error("[TCPSocket] Cannot send data: socket not connected");
+      return pockethttp::Buffer::error;
+    }
+
+    pockethttp_log("[TCPSocket] Sending " << size << " bytes");
+    size_t total_sent = 0;
+    
+    while (total_sent < size) {
+      ssize_t bytes_sent = ::send(this->socket_fd_, (const char *)(buffer + total_sent), size - total_sent, 0);
+      if (bytes_sent == SOCKET_ERROR || bytes_sent < 0) {
+        #ifdef _WIN32
+          pockethttp_error("[TCPSocket] Send failed with error: " << WSAGetLastError());
+        #else
+          pockethttp_error("[TCPSocket] Send failed with error: " << strerror(errno));
+        #endif
+        return pockethttp::Buffer::error;
+      }
+        
+      total_sent += bytes_sent;
+      pockethttp_log("[TCPSocket] Sent " << bytes_sent << " bytes. (" << total_sent << "/" << size << ")");
+    }
+    
+    last_used_timestamp_ = pockethttp::Timestamp::getCurrentTimestamp();
+    pockethttp_log("[TCPSocket] Data sent successfully");
+    return total_sent;
+  }
+
+  size_t TCPSocket::receive(unsigned char* buffer, size_t size, const int64_t& timeout) {
+    if (!this->connected_ || this->socket_fd_ == INVALID_SOCKET) {
+      pockethttp_error("[TCPSocket] Cannot receive data: socket not connected");
+      return pockethttp::Buffer::error;
+    }
+
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(this->socket_fd_, &read_fds);
+
+    // Wait a short time period to see if there is data.
+    // This avoids blocking indefinitely.
+    struct timeval timeout_;
+    timeout_.tv_sec = timeout / 1000; // seconds
+    timeout_.tv_usec = (timeout % 1000) * 1000; // microseconds
+
+    int select_result = select(this->socket_fd_ + 1, &read_fds, nullptr, nullptr, &timeout_);
+    pockethttp_log("[TCPSocket] Select result: " << select_result);
+
+    if (select_result == SOCKET_ERROR) {
+      #ifdef _WIN32
+        pockethttp_error("[TCPSocket] Select failed with error: " << WSAGetLastError());
+      #else
+        pockethttp_error("[TCPSocket] Select failed with error: " << strerror(errno));
+      #endif
+
+      this->disconnect();
+      return pockethttp::Buffer::error;
+    }
+
+    if (select_result == 0 || !FD_ISSET(this->socket_fd_, &read_fds)) {
+      // No data or timeout, return Buffer error.
+      pockethttp_error("[TCPSocket] No data available for reading (timeout [" << timeout << "] or no data): (" << errno << ") " << strerror(errno));
+      this->disconnect();
+      return pockethttp::Buffer::error;
+    }
+
+    ssize_t bytes_received = ::recv(this->socket_fd_, (char *)buffer, size, 0);
+    pockethttp_log("[TCPSocket] Received " << bytes_received << " bytes");
+
+    if (bytes_received == SOCKET_ERROR) {
+      #ifdef _WIN32
+        int err = WSAGetLastError();
+        if (err != WSAEWOULDBLOCK) {
+          pockethttp_error("[TCPSocket] Receive failed with error: " << err);
+          this->disconnect();
+        }
+      #else
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+          pockethttp_error("[TCPSocket] Receive failed with error: " << strerror(errno));
+          this->disconnect();
+        }
+      #endif
+      return pockethttp::Buffer::error;
+    }
+
+    if (bytes_received == 0) {
+      pockethttp_error("[TCPSocket] Server closed the connection: (" << errno << ") " << strerror(errno));
+      this->disconnect();
+      return pockethttp::Buffer::error;
+    }
+
+    last_used_timestamp_ = pockethttp::Timestamp::getCurrentTimestamp();
+    return bytes_received;
+  }
+
+
+  bool TCPSocket::isConnected() {
+    if (!this->connected_ || this->socket_fd_ == INVALID_SOCKET) {
+      pockethttp_log("[TCPSocket] Socket is not connected");
+      return false;
+    }
+    
+    fd_set read_fds, write_fds, error_fds;
+    FD_ZERO(&read_fds);
+    FD_ZERO(&write_fds);
+    FD_ZERO(&error_fds);
+    FD_SET(socket_fd_, &read_fds);
+    FD_SET(socket_fd_, &write_fds);
+    FD_SET(socket_fd_, &error_fds);
+    
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+
+    int result = select(this->socket_fd_ + 1, &read_fds, &write_fds, &error_fds, &timeout);
+    if (result < 0) {
+      pockethttp_error("[TCPSocket] Select failed in isConnected check");
+      this->connected_ = false;
+      this->socket_fd_ = INVALID_SOCKET;
+      return false;
+    }
+    
+    if (FD_ISSET(this->socket_fd_, &error_fds)) {
+      pockethttp_error("[TCPSocket] Socket error detected in isConnected check");
+      this->connected_ = false;
+      this->socket_fd_ = INVALID_SOCKET;
+      return false;
+    }
+
+    if (FD_ISSET(this->socket_fd_, &read_fds)) {
+      char test_buffer[1];  
+      #ifdef _WIN32
+        int peek_result = ::recv(this->socket_fd_, test_buffer, 1, MSG_PEEK);
+      #else
+        int peek_result = ::recv(this->socket_fd_, test_buffer, 1, MSG_PEEK | MSG_DONTWAIT);
+      #endif
+        
+      if (peek_result == 0) {
+        pockethttp_log("[TCPSocket] Connection closed by peer");
+        this->connected_ = false;
+        this->socket_fd_ = INVALID_SOCKET;
+        return false;
+      }
+        
+      if (peek_result == SOCKET_ERROR) {
+        #ifdef _WIN32
+          int error = WSAGetLastError();
+          if (error != WSAEWOULDBLOCK && error != WSAENOTSOCK) {
+            pockethttp_error("[TCPSocket] Peek operation failed with error: " << error);
+            this->connected_ = false;
+            this->socket_fd_ = INVALID_SOCKET;
+            return false;
+          }
+        #else
+          if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            pockethttp_error("[TCPSocket] Peek operation failed: " << strerror(errno));
+            this->connected_ = false;
+            this->socket_fd_ = INVALID_SOCKET;
+            return false;
+          }
+        #endif
+      }
+    }
+    
+    pockethttp_log("[TCPSocket] Socket connection is healthy");
+    return true;
+  }
+
+  int64_t TCPSocket::getTimestamp() const {
+    return this->last_used_timestamp_;
+  }
+
+} // namespace pockethttp
+
+// pockethttp/Sockets/TLSSocket.cpp
+// #include "pockethttp/Sockets/TLSSocket.hpp"
+// #include "pockethttp/Logs.hpp"
+// #include "pockethttp/Timestamp.hpp"
+// #include "pockethttp/Buffer.hpp"
+// #include "pockethttp/SystemCerts.hpp"
+
+#ifdef USE_POCKET_HTTP_BEARSSL
+
+
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <stdio.h>
-#include <bearssl/bearssl.h>
+
+#if __has_include("bearssl.h")
+  #include <bearssl.h>
+#elif __has_include("bearssl/bearssl.h")
+  #include <bearssl/bearssl.h>
+#else
+  #error "Cannot find bearssl.h or bearssl/bearssl.h"
+#endif
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -1903,8 +2352,8 @@ namespace pockethttp {
 
 
   bool TLSSocket::loadCerts() {
-    this->trust_anchors_ = (br_x509_trust_anchor*)TAs;
-    this->trust_anchors_count_ = TAs_NUM;
+    this->trust_anchors_ = pockethttp::SystemCerts::getBearSSLTrustAnchors();
+    this->trust_anchors_count_ = pockethttp::SystemCerts::getBearSSLTrustAnchorsSize();
     return true;
   }
 
