@@ -107,7 +107,9 @@
             "_HAS_STD_BYTE=0",
             "TRAY_WINAPI=1",
             "UNICODE",
-            "_UNICODE"
+            "_UNICODE",
+            "__m128i_u=__m128i",
+            "__m256i_u=__m256i"
         ]
     }
 }
