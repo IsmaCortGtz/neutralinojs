@@ -13,6 +13,7 @@
 /bin/neutralino-*
 /bin/resources.neu
 /bin/resources/js/neutralino.*
+/build
 
 # Platform specific 
 Thumbs.db
