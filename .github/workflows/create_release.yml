@@ -8,7 +8,7 @@ on:
         description: 'Version number Eg: 4.2.0' 
 
 jobs:
-  build-linux-x64:
+  build-linux:
     runs-on: ubuntu-22.04
 
     container:
@@ -28,69 +28,58 @@ jobs:
         libwebkit2gtk-4.0-37 \
         libwebkit2gtk-4.0-dev \
         cmake ninja-build
+    
+    - name: Install cross toolchains + dependencies
+      run: |
+        sudo dpkg --add-architecture arm64
+        sudo dpkg --add-architecture armhf
+        sudo apt-get update
+        sudo apt-get install -y \
+          gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+          gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
+          pkg-config-aarch64-linux-gnu pkg-config-arm-linux-gnueabihf \
+          libgtk-3-dev:arm64 libgtk-3-dev:armhf \
+          libglib2.0-dev:arm64 libglib2.0-dev:armhf \
+          libx11-dev:arm64 libx11-dev:armhf \
+          libxrandr-dev:arm64 libxrandr-dev:armhf \
+          libxcb1-dev:arm64 libxcb1-dev:armhf \
+          libpng-dev:arm64 libpng-dev:armhf
         
     - name: Checkout 
       uses: actions/checkout@v3
         
-    - name: Build
+    - name: Build x64
       run: |
         git config --global --add safe.directory $GITHUB_WORKSPACE
         mkdir -p build
         cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build
         ninja -C build -j$(nproc)
         cp build/bin/neutralino-linux_x64 bin/neutralino-linux_x64
-      
+        
+    - name: Build arm64
+      run: |
+        git config --global --add safe.directory $GITHUB_WORKSPACE
+        mkdir -p build-arm64
+        cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build-arm64 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-arm64.cmake
+        ninja -C build-arm64 -j$(nproc)
+        cp build-arm64/bin/neutralino-linux_arm64 bin/neutralino-linux_arm64
+        
+    - name: Build armhf
+      run: |
+        git config --global --add safe.directory $GITHUB_WORKSPACE
+        mkdir -p build-armhf
+        cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build-armhf -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-armhf.cmake
+        ninja -C build-armhf -j$(nproc)
+        cp build-armhf/bin/neutralino-linux_armhf bin/neutralino-linux_armhf
+
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4.4.0
       with:
-        name: linux_x64_binary
-        path: bin/neutralino-linux_x64
-
-  build-linux-arm:
-    runs-on: ubuntu-22.04
-    
-    strategy:
-      matrix:
-        arch: [arm64, armhf]
-        
-    steps:
-    - name: Checkout 
-      uses: actions/checkout@v3
-      
-    - name: Build
-      uses: uraimo/run-on-arch-action@v3
-      id: build-package
-      with:
-        arch: ${{ matrix.arch == 'arm64' && 'aarch64' || 'armv7' }}
-        distro: ubuntu20.04
-        install: |
-          apt-get update
-          apt-get install -y -f \
-          libgtk-3-dev \
-          libwebkit2gtk-4.0-dev \
-          git \
-          python3 \
-          g++ \
-          pkg-config \
-          cmake ninja-build
-
-        githubToken: ${{ github.token }}
-        
-        dockerRunArgs: |
-            --volume "${PWD}/bin:${PWD}/bin"
-
-        run: |
-          git config --global --add safe.directory $GITHUB_WORKSPACE
-          mkdir -p build
-          cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build
-          ninja -C build -j$(nproc)
-          cp build/bin/neutralino-linux_${{ matrix.arch }} bin/neutralino-linux_${{ matrix.arch }}
-      
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4.4.0
-      with:
-        name: linux_${{ matrix.arch }}_binary
-        path: bin/neutralino-linux_${{ matrix.arch }}
+        name: linux_binary
+        path: |
+          bin/neutralino-linux_x64
+          bin/neutralino-linux_arm64
+          bin/neutralino-linux_armhf
 
   build-windows:
     runs-on: windows-2022
@@ -150,7 +139,7 @@ jobs:
           bin/neutralino-mac_universal
         
   create-release:
-    needs: [build-linux-x64, build-linux-arm, build-windows, build-darwin]
+    needs: [build-linux, build-windows, build-darwin]
     runs-on: ubuntu-latest
     steps:
     - name: Checkout 
@@ -159,19 +148,7 @@ jobs:
     - name: Download Linux build artifacts 
       uses: actions/download-artifact@v4.1.7
       with:
-        name: linux_x64_binary
-        path: ./bin
-        
-    - name: Download Linux build artifacts 
-      uses: actions/download-artifact@v4.1.7
-      with:
-        name: linux_arm64_binary
-        path: ./bin
-        
-    - name: Download Linux build artifacts 
-      uses: actions/download-artifact@v4.1.7
-      with:
-        name: linux_armhf_binary
+        name: linux_binary
         path: ./bin
 
     - name: Download Windows build artifacts
