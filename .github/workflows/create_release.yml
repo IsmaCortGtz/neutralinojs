@@ -26,7 +26,8 @@ jobs:
         git \
         libgtk-3-dev \
         libwebkit2gtk-4.0-37 \
-        libwebkit2gtk-4.0-dev
+        libwebkit2gtk-4.0-dev \
+        cmake
         
     - name: Checkout 
       uses: actions/checkout@v3
@@ -34,7 +35,7 @@ jobs:
     - name: Build
       run: |
         git config --global --add safe.directory $GITHUB_WORKSPACE
-        mkdir build
+        mkdir -p build bin
         cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build
         ninja -C build -j$(nproc)
         cp build/bin/neutralino-linux_x64 bin/neutralino-linux_x64
@@ -70,7 +71,8 @@ jobs:
           git \
           python3 \
           g++ \
-          pkg-config
+          pkg-config \
+          cmake
 
         githubToken: ${{ github.token }}
         
@@ -79,7 +81,7 @@ jobs:
 
         run: |
           git config --global --add safe.directory $GITHUB_WORKSPACE
-          mkdir build
+          mkdir -p build bin
           cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build
           ninja -C build -j$(nproc)
           cp build/bin/neutralino-linux_${{ matrix.arch }} bin/neutralino-linux_${{ matrix.arch }}
@@ -96,10 +98,13 @@ jobs:
     - name: Checkout 
       uses: actions/checkout@v3
 
-    - name: Build
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Build    
       shell: cmd
       run: |
-        mkdir build
+        mkdir build bin
         cmake -DCMAKE_BUILD_TYPE=Release . -G "Ninja" -B build
         ninja -C build -j %NUMBER_OF_PROCESSORS%
         copy build\bin\neutralino-win_x64.exe bin\neutralino-win_x64.exe
@@ -118,7 +123,7 @@ jobs:
 
     - name: Build arm64
       run: |
-        mkdir build
+        mkdir -p build bin
         cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 . -G Ninja -B build
         ninja -C build
         cp build/bin/neutralino-mac_arm64 bin/neutralino-mac_arm64
@@ -126,7 +131,7 @@ jobs:
     - name: Build x64
       run: |
         rm -fr build
-        mkdir build
+        mkdir -p build bin
         cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64 . -G Ninja -B build
         ninja -C build
         cp build/bin/neutralino-mac_x64 bin/neutralino-mac_x64

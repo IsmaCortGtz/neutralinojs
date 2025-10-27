@@ -156,11 +156,12 @@ if(WIN32)
       /utf-8
       /EHsc
       /Os
-      /Gy 
-      /OPT:REF 
+      /Gy
+    )
+    target_link_options(${PROJECT_NAME} PRIVATE
+      /OPT:REF
       /OPT:ICF
     )
-    
     target_link_libraries(${PROJECT_NAME} PRIVATE
       ${PROJECT_SOURCE_DIR}/lib/webview/windows/WebView2LoaderStatic.lib
       gdi32
@@ -179,14 +180,12 @@ elseif(APPLE)
       ${WebKit_FRAMEWORK}
       ${COCOA_FRAMEWORK}
     )
-
     target_compile_options(${PROJECT_NAME} PRIVATE
       -Wno-deprecated-declarations
       -Os
-      -mmacosx-version-min=11.01
-      -ffunction-sections 
-      -fdata-sections 
-      -Wl,--gc-sections
+    )
+    target_link_options(${PROJECT_NAME} PRIVATE
+      -Wl,-dead_strip
     )
 elseif(UNIX)
     # Linux / otros UNIX
@@ -216,13 +215,12 @@ elseif(UNIX)
       stdc++fs
       dl
     )
-    
     target_compile_options(${PROJECT_NAME} PRIVATE 
       -no-pie
       -Os
-      -ffunction-sections 
-      -fdata-sections 
-      -Wl,--gc-sections
+    )
+    target_link_options(${PROJECT_NAME} PRIVATE
+      -Wl,--gc-sections  # Linux garbage collection
     )
 endif()
 
