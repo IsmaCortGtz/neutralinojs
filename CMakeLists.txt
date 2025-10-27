@@ -88,11 +88,7 @@ list(FILTER SOURCES EXCLUDE REGEX ".*/asio/src/.*")
 # Create executable or library
 # =========================
 add_executable(${PROJECT_NAME} ${SOURCES})
-set(OUTPUT_NAME_STR "neutralino-${NEU_OS_NAME}_${NEU_SYSTEM_PROCESSOR}")
-set_target_properties(${PROJECT_NAME} PROPERTIES 
-  OUTPUT_NAME ${OUTPUT_NAME_STR}
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-)
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "bin/neutralino-${NEU_OS_NAME}_${NEU_SYSTEM_PROCESSOR}")
 
 # =========================
 # Compiler definitions
@@ -161,6 +157,8 @@ if(WIN32)
     target_link_options(${PROJECT_NAME} PRIVATE
       /OPT:REF
       /OPT:ICF
+      /SUBSYSTEM:WINDOWS
+      /ENTRY:wWinMainCRTStartup
     )
     target_link_libraries(${PROJECT_NAME} PRIVATE
       ${PROJECT_SOURCE_DIR}/lib/webview/windows/WebView2LoaderStatic.lib
