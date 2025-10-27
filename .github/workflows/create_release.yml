@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs: 
       version: 
-        type: text
+        type: string
         description: 'Version number Eg: 4.2.0' 
 
 jobs:
@@ -34,7 +34,10 @@ jobs:
     - name: Build
       run: |
         git config --global --add safe.directory $GITHUB_WORKSPACE
-        ./scripts/bz.py
+        mkdir build
+        cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build
+        ninja -C build -j$(nproc)
+        cp build/bin/neutralino-linux_x64 bin/neutralino-linux_x64
       
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4.4.0
@@ -68,6 +71,7 @@ jobs:
           python3 \
           g++ \
           pkg-config
+
         githubToken: ${{ github.token }}
         
         dockerRunArgs: |
@@ -75,7 +79,10 @@ jobs:
 
         run: |
           git config --global --add safe.directory $GITHUB_WORKSPACE
-          ./scripts/bz.py
+          mkdir build
+          cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build
+          ninja -C build -j$(nproc)
+          cp build/bin/neutralino-linux_${{ matrix.arch }} bin/neutralino-linux_${{ matrix.arch }}
       
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4.4.0
@@ -88,9 +95,15 @@ jobs:
     steps:
     - name: Checkout 
       uses: actions/checkout@v3
+
     - name: Build
-      run: python ./scripts/bz.py
       shell: cmd
+      run: |
+        mkdir build
+        cmake -DCMAKE_BUILD_TYPE=Release . -G "Ninja" -B build
+        ninja -C build -j %NUMBER_OF_PROCESSORS%
+        copy build\bin\neutralino-win_x64.exe bin\neutralino-win_x64.exe
+
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4.4.0
       with:
@@ -102,11 +115,26 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-    - name: Build
+
+    - name: Build arm64
       run: |
-        ./scripts/bz.py --target_arch x64
-        ./scripts/bz.py --target_arch arm64
+        mkdir build
+        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 . -G Ninja -B build
+        ninja -C build
+        cp build/bin/neutralino-mac_arm64 bin/neutralino-mac_arm64
+
+    - name: Build x64
+      run: |
+        rm -fr build
+        mkdir build
+        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64 . -G Ninja -B build
+        ninja -C build
+        cp build/bin/neutralino-mac_x64 bin/neutralino-mac_x64
+
+    - name: Merge universal
+      run: |
         lipo bin/neutralino-mac_x64 bin/neutralino-mac_arm64 -create -output bin/neutralino-mac_universal
+
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4.4.0
       with:
