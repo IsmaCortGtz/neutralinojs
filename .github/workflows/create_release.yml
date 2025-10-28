@@ -11,16 +11,25 @@ jobs:
   build-linux:
     runs-on: ubuntu-22.04
     steps:
-    - name: Enable cross-compilation architectures (ARM64 + ARMHF)
+    - name: Configure ARM repositories
       run: |
         sudo dpkg --add-architecture arm64
         sudo dpkg --add-architecture armhf
-        sudo tee /etc/apt/sources.list.d/arm-cross.list <<'EOF'
+
+        sudo mv /etc/apt/sources.list /etc/apt/sources.list.amd64.bak
+
+        sudo tee /etc/apt/sources.list <<'EOF'
+        deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main universe multiverse restricted
+        deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main universe multiverse restricted
+        deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-security main universe multiverse restricted
+
         deb [arch=arm64,armhf] http://ports.ubuntu.com/ubuntu-ports jammy main universe multiverse restricted
         deb [arch=arm64,armhf] http://ports.ubuntu.com/ubuntu-ports jammy-updates main universe multiverse restricted
         deb [arch=arm64,armhf] http://ports.ubuntu.com/ubuntu-ports jammy-security main universe multiverse restricted
         EOF
-        sudo apt-get update
+
+        sudo apt-get clean
+        sudo apt-get update -o Acquire::Retries=3
 
     - name: Install ARM toolchains and dependencies
       run: |
