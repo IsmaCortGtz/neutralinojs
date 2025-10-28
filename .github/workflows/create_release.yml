@@ -64,7 +64,7 @@ jobs:
       run: |
         git config --global --add safe.directory $GITHUB_WORKSPACE
         mkdir -p build-arm64
-        cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build-arm64 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-arm64.cmake
+        cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build-arm64 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/linux-aarch64.cmake
         ninja -C build-arm64 -j$(nproc)
         cp build-arm64/bin/neutralino-linux_arm64 bin/neutralino-linux_arm64
         
