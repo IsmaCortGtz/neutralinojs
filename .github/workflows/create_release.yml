@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-linux:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         include:
@@ -77,10 +77,9 @@ jobs:
     - name: Build ${{ matrix.arch }}
       run: |
         git config --global --add safe.directory $GITHUB_WORKSPACE
-        mkdir -p build-${{ matrix.arch }}
-        cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build-${{ matrix.arch }} ${{ matrix.toolchain }}
-        ninja -C build-${{ matrix.arch }} -j$(nproc)
-        cp build-${{ matrix.arch }}/bin/neutralino-linux_${{ matrix.neuarch }} bin/neutralino-linux_${{ matrix.neuarch }}
+        mkdir -p build
+        cmake -DCMAKE_BUILD_TYPE=Release . -G Ninja -B build ${{ matrix.toolchain }}
+        ninja -C build -j$(nproc)
     
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4.4.0
@@ -90,7 +89,7 @@ jobs:
           bin/neutralino-linux_${{ matrix.neuarch }}
 
   build-windows:
-    runs-on: windows-2022
+    runs-on: windows-2025
     steps:
     - name: Checkout 
       uses: actions/checkout@v3
@@ -104,7 +103,6 @@ jobs:
         mkdir build
         cmake -DCMAKE_BUILD_TYPE=Release . -G "Ninja" -B build
         ninja -C build -j %NUMBER_OF_PROCESSORS%
-        copy build\bin\neutralino-win_x64.exe bin\neutralino-win_x64.exe
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4.4.0
@@ -113,7 +111,7 @@ jobs:
         path: bin/neutralino-win_x64.exe
 
   build-darwin:
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
     - name: Checkout
       uses: actions/checkout@v3
@@ -123,7 +121,6 @@ jobs:
         mkdir -p build
         cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 . -G Ninja -B build
         ninja -C build
-        cp build/bin/neutralino-mac_arm64 bin/neutralino-mac_arm64
 
     - name: Build x64
       run: |
@@ -131,7 +128,6 @@ jobs:
         mkdir -p build
         cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64 . -G Ninja -B build
         ninja -C build
-        cp build/bin/neutralino-mac_x64 bin/neutralino-mac_x64
 
     - name: Merge universal
       run: |
@@ -192,7 +188,7 @@ jobs:
     - name: Create Release Notes
       run: |
         chmod +x ./scripts/rz.py
-        ./scripts/rz.py create ${{github.event.inputs.version}}
+        ./scripts/rz.py create ${{github.event.inputs.version}} --no-changes
         
     - name: Commit and Push Changelog
       uses: EndBug/add-and-commit@v9.1.3
@@ -207,7 +203,7 @@ jobs:
       with: 
         branch: v${{github.event.inputs.version}}
       env:
-        GITHUB_TOKEN: ${{ secrets.COMMIT_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Create a GitHub release
       uses: ncipollo/release-action@v1
@@ -220,12 +216,3 @@ jobs:
     - name: Clean Release Notes
       run: |
         ./scripts/rz.py cleanup
-        
-    - name: Send Discord Notification
-      env:
-        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-      uses: Ilshidur/action-discord@master
-      with:
-        args: |
-          Neutralinojs v${{github.event.inputs.version}} released 🚀
-          Changelog: https://github.com/neutralinojs/neutralinojs/releases/tag/v${{github.event.inputs.version}}
