@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(NeutralinoJS LANGUAGES C CXX)
+project(NeutralinoJS LANGUAGES C CXX OBJC OBJCXX)
 set(NEU_VERSION "6.4.0")
 set(NEU_CXX_STANDARD 17)
 
