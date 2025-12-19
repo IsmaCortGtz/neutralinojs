@@ -15,6 +15,12 @@
 #include <CoreFoundation/Corefoundation.h>
 #include <CoreGraphics/CGDisplayConfiguration.h>
 #include <CoreGraphics/CGWindow.h>
+
+// Include ScreenCaptureKit BEFORE defining macros that conflict with AppKit
+#if MAC_OS_X_VERSION_MIN_REQUIRED >= 120300
+#import <ScreenCaptureKit/ScreenCaptureKit.h>
+#endif
+
 #define NSBaseWindowLevel 0
 #define NSFloatingWindowLevel 5
 #define NSWindowStyleMaskFullScreen 16384
@@ -49,10 +55,6 @@
 #include "api/fs/fs.h"
 #include "api/debug/debug.h"
 #include "api/computer/computer.h"
-
-#if defined(__APPLE__) && MAC_OS_X_VERSION_MIN_REQUIRED >= 120300
-#import <ScreenCaptureKit/ScreenCaptureKit.h>
-#endif
 
 using namespace std;
 using json = nlohmann::json;
