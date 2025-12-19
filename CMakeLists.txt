@@ -205,10 +205,15 @@ elseif(APPLE)
     # macOS
     find_library(WebKit_FRAMEWORK WebKit)
     find_library(COCOA_FRAMEWORK Cocoa)
+    find_library(SCREENCAPTUREKIT_FRAMEWORK ScreenCaptureKit)
     target_link_libraries(${PROJECT_NAME} PRIVATE
       ${WebKit_FRAMEWORK}
       ${COCOA_FRAMEWORK}
     )
+    # ScreenCaptureKit is only available on macOS 12.3+
+    if(SCREENCAPTUREKIT_FRAMEWORK)
+      target_link_libraries(${PROJECT_NAME} PRIVATE ${SCREENCAPTUREKIT_FRAMEWORK})
+    endif()
     target_compile_options(${PROJECT_NAME} PRIVATE
       -Wno-deprecated-declarations
       -Os
