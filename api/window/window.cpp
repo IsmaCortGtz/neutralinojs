@@ -16,8 +16,7 @@
 #include <CoreGraphics/CGDisplayConfiguration.h>
 #include <CoreGraphics/CGWindow.h>
 
-// Include ScreenCaptureKit BEFORE defining macros that conflict with AppKit
-#if MAC_OS_X_VERSION_MIN_REQUIRED >= 120300
+#if defined(__APPLE__) && MAC_OS_X_VERSION_MIN_REQUIRED >= 120300
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #endif
 
