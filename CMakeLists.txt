@@ -16,6 +16,28 @@ execute_process(
 )
 
 # =========================
+# Ensure submodules
+# =========================
+find_package(Git QUIET)
+
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  option(GIT_SUBMODULE "Check submodules during build" ON)
+
+  if(GIT_SUBMODULE)
+    message(STATUS "Checking git submodules...")
+    execute_process(
+      COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+      RESULT_VARIABLE GIT_SUBMOD_RESULT
+    )
+
+    if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+      message(FATAL_ERROR "Git submodule update failed")
+    endif()
+  endif()
+endif()
+
+# =========================
 # Source files
 # =========================
 file (GLOB SOURCES *.cpp)
@@ -30,6 +52,9 @@ file(GLOB_RECURSE RECURSIVE_SOURCES
   lib/clip/image.cpp
   lib/infoware/src/**/*.cpp
   lib/efsw/src/efsw/*.cpp
+  lib/miniz/*.c
+  lib/brotli/**/*.c
+  lib/pocket-http/*.cpp
 )
 list(APPEND SOURCES ${RECURSIVE_SOURCES})
 
@@ -122,6 +147,37 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 # =========================
+# Add MbedTLS external lib
+# =========================
+set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build Mbed TLS static library" FORCE)
+set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Disable shared mbedtls library" FORCE)
+
+set(USE_STATIC_TF_PSA_CRYPTO_LIBRARY ON CACHE BOOL "Build TF-PSA-Crypto static" FORCE)
+set(USE_SHARED_TF_PSA_CRYPTO_LIBRARY OFF CACHE BOOL "Disable TF-PSA-Crypto shared" FORCE)
+
+set(GEN_FILES ON CACHE BOOL "Enable generated files" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Disable BUILD_SHARED_LIBS globally" FORCE)
+set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "Disable package & install targets" FORCE)
+
+set(MBEDTLS_USER_CONFIG_FILE "${PROJECT_SOURCE_DIR}/api/net/mbedtls_config_user.h" CACHE FILEPATH "Mbed TLS user config file" FORCE)
+    
+add_subdirectory(lib/mbedtls)
+set(MBEDTLS_LINK_TARGETS "")
+
+foreach(tg IN ITEMS MbedTLS::mbedtls MbedTLS::mbedx509)
+  if(TARGET ${tg})
+    list(APPEND MBEDTLS_LINK_TARGETS ${tg})
+  endif()
+endforeach()
+
+if(MBEDTLS_LINK_TARGETS)
+  message(STATUS "Linking with MbedTLS targets: ${MBEDTLS_LINK_TARGETS}")
+  target_link_libraries(${PROJECT_NAME} PRIVATE ${MBEDTLS_LINK_TARGETS})
+else()
+  message(FATAL_ERROR "MbedTLS requested but no known Mbed TLS targets found after add_subdirectory(lib/mbedtls).")
+endif()
+
+# =========================
 # Compiler definitions
 # =========================
 target_compile_definitions(${PROJECT_NAME} PRIVATE 
@@ -132,6 +188,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
   INFOWARE_VERSION="0.6.0"
   INFOWARE_USE_X11
   CLIP_ENABLE_IMAGE
+  USE_POCKET_HTTP_MBEDTLS
 )
 
 if(WIN32)
@@ -167,6 +224,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   ${PROJECT_SOURCE_DIR}/lib/infoware/include
   ${PROJECT_SOURCE_DIR}/lib/efsw/include
   ${PROJECT_SOURCE_DIR}/lib/efsw/src
+  ${PROJECT_SOURCE_DIR}/lib/brotli/include
 )
 if(WIN32)
   target_include_directories(${PROJECT_NAME} PRIVATE 

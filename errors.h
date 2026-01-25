@@ -65,7 +65,12 @@ enum StatusCode {
     NE_CF_UNBLDCF,
     NE_CF_UNBPRCF,
     NE_CF_UNSUPMD,
-    NE_CF_UNBLWCF
+    NE_CF_UNBLWCF,
+    // net
+    NE_NW_WIN32ER,
+    NE_NW_DNSRESV,
+    NE_NW_REQFAIL,
+    NE_NW_REQCANC,
 };
 
 json makeMissingArgErrorPayload(const string& missingArg);
