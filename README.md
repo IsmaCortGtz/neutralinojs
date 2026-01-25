@@ -89,6 +89,13 @@ If you like to support our work, you can donate to Neutralinojs via [Patreon](ht
 - Cross-platform C++ system information library: CC0 1.0 Universal from [ThePhD/infoware](https://github.com/ThePhD/infoware). Written in 2016-2020 by nabijaczleweli and ThePhD
 - Cross-platform C++ filesystem watcher library: MIT from [SpartanJ/efsw](https://github.com/SpartanJ/efsw). Copyright (c) 2020 Martín Lucas Golini
 - Resource injection/reading library for C++/Node.js: MIT from [nodejs/postject](https://github.com/nodejs/postject). Copyright (c) 2022 Postman, Inc
+- pocket-http: MIT from [IsmaCortGtz/pocket-http](https://github.com/IsmaCortGtz/pocket-http). Copyright (c) 2025 Ismael Cortés Gutiérrez.
+- miniz: MIT from [richgel999/miniz](https://github.com/richgel999/miniz). 
+Copyright 2013-2014 RAD Game Tools and Valve Software. Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC.
+- brotli: MIT from [google/brotli](https://github.com/google/brotli). 
+Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
+- mbedTLS: [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) from [Mbed-TLS/mbedtls](https://github.com/Mbed-TLS/mbedtls).
+Copyright
 - Logo design credits: [IconsPng](https://www.iconspng.com/image/2688/atom-orange). Copyright free as mentioned on their website.
 
 [See the complete license file](LICENSE)
