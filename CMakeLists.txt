@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
 set(NEU_VERSION "6.4.0")
 set(NEU_CXX_STANDARD 17)
+
+if(WIN32)
+  cmake_policy(SET CMP0053 NEW)
+  cmake_policy(SET CMP0010 NEW)
+endif()
+
 if(APPLE)
   project(NeutralinoJS LANGUAGES C CXX OBJC OBJCXX)
 else()
@@ -149,18 +155,15 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # =========================
 # Add MbedTLS external lib
 # =========================
-if(WIN32)
-  set(CMAKE_POLICY_DEFAULT_CMP0053 NEW)
-  set(CMAKE_POLICY_DEFAULT_CMP0010 NEW)
-endif()
-
 set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build Mbed TLS static library" FORCE)
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Disable shared mbedtls library" FORCE)
 
 set(USE_STATIC_TF_PSA_CRYPTO_LIBRARY ON CACHE BOOL "Build TF-PSA-Crypto static" FORCE)
 set(USE_SHARED_TF_PSA_CRYPTO_LIBRARY OFF CACHE BOOL "Disable TF-PSA-Crypto shared" FORCE)
 
-set(GEN_FILES ON CACHE BOOL "Enable generated files" FORCE)
+# Workaround for Windows backslash issue in MbedTLS
+# https://github.com/Mbed-TLS/mbedtls/issues/10502
+set(GEN_FILES OFF CACHE BOOL "Disable generated files (Windows workaround)" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Disable BUILD_SHARED_LIBS globally" FORCE)
 set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "Disable package & install targets" FORCE)
 
