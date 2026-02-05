@@ -15,6 +15,12 @@ execute_process(
   ERROR_QUIET
 )
 
+if(WIN32)
+  string(REPLACE "\\" "/" CMAKE_SOURCE_DIR "${CMAKE_SOURCE_DIR}")
+  string(REPLACE "\\" "/" CMAKE_BINARY_DIR "${CMAKE_BINARY_DIR}")
+  string(REPLACE "\\" "/" PROJECT_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
+endif()
+
 # =========================
 # Ensure submodules
 # =========================
