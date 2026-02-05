@@ -2,11 +2,6 @@ cmake_minimum_required(VERSION 3.16)
 set(NEU_VERSION "6.4.0")
 set(NEU_CXX_STANDARD 17)
 
-if(WIN32)
-  cmake_policy(SET CMP0053 NEW)
-  cmake_policy(SET CMP0010 NEW)
-endif()
-
 if(APPLE)
   project(NeutralinoJS LANGUAGES C CXX OBJC OBJCXX)
 else()
@@ -155,15 +150,53 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # =========================
 # Add MbedTLS external lib
 # =========================
+# Apply patch for Windows backslash issue
+# https://github.com/Mbed-TLS/mbedtls/issues/10502
+if(WIN32)
+  set(PATCH_FILE1 "${CMAKE_SOURCE_DIR}/lib/mbedtls/framework/scripts/mbedtls_framework/config_checks_generator.py")
+  set(PATCH_FILE2 "${CMAKE_SOURCE_DIR}/lib/mbedtls/tf-psa-crypto/framework/scripts/mbedtls_framework/config_checks_generator.py")
+  
+  # Check if patch is needed (file exists and not already patched)
+  if(EXISTS "${PATCH_FILE1}")
+    file(READ "${PATCH_FILE1}" PATCH_CONTENT1)
+    string(FIND "${PATCH_CONTENT1}" "directory + '/' + generator.output_file_name()" ALREADY_PATCHED1)
+    
+    if(ALREADY_PATCHED1 EQUAL -1)
+      message(STATUS "Applying Windows path fix to config_checks_generator.py (file 1)")
+      string(REPLACE 
+        "yield os.path.join(directory, generator.output_file_name())"
+        "# Make sure to output a path with / even on Windows, so that\n        # it can be consumed by tools such as CMake.\n        yield directory + '/' + generator.output_file_name()"
+        PATCH_CONTENT1 
+        "${PATCH_CONTENT1}"
+      )
+      file(WRITE "${PATCH_FILE1}" "${PATCH_CONTENT1}")
+    endif()
+  endif()
+  
+  if(EXISTS "${PATCH_FILE2}")
+    file(READ "${PATCH_FILE2}" PATCH_CONTENT2)
+    string(FIND "${PATCH_CONTENT2}" "directory + '/' + generator.output_file_name()" ALREADY_PATCHED2)
+    
+    if(ALREADY_PATCHED2 EQUAL -1)
+      message(STATUS "Applying Windows path fix to config_checks_generator.py (file 2)")
+      string(REPLACE 
+        "yield os.path.join(directory, generator.output_file_name())"
+        "# Make sure to output a path with / even on Windows, so that\n        # it can be consumed by tools such as CMake.\n        yield directory + '/' + generator.output_file_name()"
+        PATCH_CONTENT2 
+        "${PATCH_CONTENT2}"
+      )
+      file(WRITE "${PATCH_FILE2}" "${PATCH_CONTENT2}")
+    endif()
+  endif()
+endif()
+
 set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build Mbed TLS static library" FORCE)
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Disable shared mbedtls library" FORCE)
 
 set(USE_STATIC_TF_PSA_CRYPTO_LIBRARY ON CACHE BOOL "Build TF-PSA-Crypto static" FORCE)
 set(USE_SHARED_TF_PSA_CRYPTO_LIBRARY OFF CACHE BOOL "Disable TF-PSA-Crypto shared" FORCE)
 
-# Workaround for Windows backslash issue in MbedTLS
-# https://github.com/Mbed-TLS/mbedtls/issues/10502
-set(GEN_FILES OFF CACHE BOOL "Disable generated files (Windows workaround)" FORCE)
+set(GEN_FILES ON CACHE BOOL "Enable generated files" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Disable BUILD_SHARED_LIBS globally" FORCE)
 set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "Disable package & install targets" FORCE)
 
