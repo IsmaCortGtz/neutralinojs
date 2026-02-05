@@ -15,12 +15,6 @@ execute_process(
   ERROR_QUIET
 )
 
-if(WIN32)
-  string(REPLACE "\\" "/" CMAKE_SOURCE_DIR "${CMAKE_SOURCE_DIR}")
-  string(REPLACE "\\" "/" CMAKE_BINARY_DIR "${CMAKE_BINARY_DIR}")
-  string(REPLACE "\\" "/" PROJECT_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
-endif()
-
 # =========================
 # Ensure submodules
 # =========================
@@ -155,6 +149,11 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # =========================
 # Add MbedTLS external lib
 # =========================
+if(WIN32)
+  set(CMAKE_POLICY_DEFAULT_CMP0053 NEW)
+  set(CMAKE_POLICY_DEFAULT_CMP0010 NEW)
+endif()
+
 set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "Build Mbed TLS static library" FORCE)
 set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "Disable shared mbedtls library" FORCE)
 
@@ -270,10 +269,12 @@ elseif(APPLE)
     find_library(WebKit_FRAMEWORK WebKit)
     find_library(COCOA_FRAMEWORK Cocoa)
     find_library(SCREENCAPTUREKIT_FRAMEWORK ScreenCaptureKit)
+    find_library(SECURITY_FRAMEWORK Security)
     target_link_libraries(${PROJECT_NAME} PRIVATE
       ${WebKit_FRAMEWORK}
       ${COCOA_FRAMEWORK}
       ${SCREENCAPTUREKIT_FRAMEWORK}
+      ${SECURITY_FRAMEWORK}
     )
     target_compile_options(${PROJECT_NAME} PRIVATE
       -Wno-deprecated-declarations
