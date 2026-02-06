@@ -336,4 +336,39 @@ describe('net.spec: net namespace tests', () => {
             assert.equal(runner.getOutput(), 'NE_NW_REQCANC');
         });
     });
+    it('works with form data', async () => {
+        runner.run(`
+            try {
+                const body = new FormData();
+                body.set("key", "value");
+                const res = await Neutralino.net.fetch('http://httpbin.org/anything', {
+                    method: 'POST',
+                    body: body
+                });
+                await __close(await res.text());
+            }
+            catch(err) {
+                await __close(err.code);
+            }
+        `);
+        const res = JSON.parse(runner.getOutput());
+        assert.equal(res.form.key, 'value');
+    });
+    it('works with form-urlencoded', async () => {
+        runner.run(`
+            try {
+                const body = new URLSearchParams({ key: 'value' });
+                const res = await Neutralino.net.fetch('http://httpbin.org/anything', {
+                    method: 'POST',
+                    body: body
+                });
+                await __close(await res.text());
+            }
+            catch(err) {
+                await __close(err.code);
+            }
+        `);
+        const res = JSON.parse(runner.getOutput());
+        assert.equal(res.form.key, 'value');
+    });
 });
